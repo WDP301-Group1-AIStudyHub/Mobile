@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "AI Study Hub",
+    "slug": "ai-study-hub-mobile",
+    "version": "1.0.0",
+    "scheme": "aistudyhub",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#050816"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.aistudyhub.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#050816"
+      },
+      "package": "com.aistudyhub.mobile"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      "expo-asset",
+      "expo-video"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
