@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Tabs } from 'expo-router'
-import { LayoutDashboard, BookOpen, MessageCircle, User } from 'lucide-react-native'
+import { LayoutDashboard, BookOpen, MessageCircle, User, BarChart2 } from 'lucide-react-native'
 import { View, StyleSheet, Platform } from 'react-native'
 
 import { useColors, useTheme } from '../../contexts/ThemeContext'
@@ -80,11 +80,11 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen
-        name="dashboard"
+        name="library"
         options={{
-          title: 'Dashboard',
+          title: 'Library',
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon={LayoutDashboard} focused={focused} />
+            <TabIcon icon={BookOpen} focused={focused} />
           ),
         }}
       />
@@ -98,11 +98,20 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="library"
+        name="dashboard"
         options={{
-          title: 'Library',
+          title: 'Dashboard',
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon={BookOpen} focused={focused} />
+            <TabIcon icon={LayoutDashboard} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="benchmarks"
+        options={{
+          title: 'Benchmarks',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon={BarChart2} focused={focused} />
           ),
         }}
       />
