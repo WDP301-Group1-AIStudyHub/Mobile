@@ -28,12 +28,22 @@ export function useAuth() {
       }
 
       try {
-        const fresh = await getCurrentUser()
+        // Timeout 10s để tránh treo khi backend cold start (Render free tier)
+        const fresh = await Promise.race([
+          getCurrentUser(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Auth timeout')), 10_000)
+          ),
+        ])
         if (!cancelled) setState({ status: 'authenticated', user: fresh })
       } catch {
         if (!cancelled) {
-          await clearAuthSession()
-          setState({ status: 'unauthenticated' })
+          // If stored user exists → keep authenticated (offline / slow network)
+          // Otherwise → clear session and redirect to login
+          if (!stored) {
+            await clearAuthSession()
+            setState({ status: 'unauthenticated' })
+          }
         }
       }
     }

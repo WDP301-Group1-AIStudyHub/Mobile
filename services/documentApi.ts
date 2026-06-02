@@ -1,4 +1,3 @@
-import { getStoredToken } from './authStorage'
 import type {
   DocumentItem,
   DocumentsResponse,
@@ -6,10 +5,12 @@ import type {
   UploadDocumentPayload,
 } from '../types/document'
 import type { ApiResponse } from '../types/auth'
+import apiClient, { API_BASE_URL } from './apiClient'
+import { getStoredToken } from './authStorage'
 
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/+$/, '') || 'http://localhost:3000'
 const USE_MOCK_AUTH = process.env.EXPO_PUBLIC_AUTH_MOCK === '1'
+
+// ── Mock data ─────────────────────────────────────────────────────────────────
 
 let mockDocuments: DocumentsResponse = [
   {
@@ -84,18 +85,21 @@ let mockDocuments: DocumentsResponse = [
   },
 ]
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const token = await getStoredToken()
-  return token ? { Authorization: `Bearer ${token}` } : {}
+// ── Document API ──────────────────────────────────────────────────────────────
+
+/** Strip heavy fields (extractedText) that cause OOM on Android */
+function trimDoc(doc: DocumentItem): DocumentItem {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { extractedText: _et, ...rest } = doc as DocumentItem & { extractedText?: string }
+  return rest
 }
 
 export async function listDocuments(): Promise<DocumentsResponse> {
   if (USE_MOCK_AUTH) return mockDocuments
 
-  const headers = await authHeaders()
-  const res = await fetch(`${API_BASE_URL}/api/documents`, { headers })
-  const json: ApiResponse<DocumentsResponse> = await res.json()
-  return json.data ?? []
+  const { data } = await apiClient.get<ApiResponse<{ documents: DocumentItem[]; total: number }>>('/api/documents')
+  const docs = data.data?.documents ?? data.data as unknown as DocumentItem[] ?? []
+  return (Array.isArray(docs) ? docs : []).map(trimDoc)
 }
 
 export async function searchDocuments(query: string): Promise<DocumentsResponse> {
@@ -109,13 +113,10 @@ export async function searchDocuments(query: string): Promise<DocumentsResponse>
     )
   }
 
-  const headers = await authHeaders()
-  const res = await fetch(
-    `${API_BASE_URL}/api/documents/search?q=${encodeURIComponent(query)}`,
-    { headers },
-  )
-  const json: ApiResponse<DocumentsResponse> = await res.json()
-  return json.data ?? []
+  const { data } = await apiClient.get<ApiResponse<DocumentsResponse>>('/api/documents/search', {
+    params: { q: query },
+  })
+  return data.data ?? []
 }
 
 export async function uploadDocument(payload: UploadDocumentPayload): Promise<DocumentItem> {
@@ -139,7 +140,6 @@ export async function uploadDocument(payload: UploadDocumentPayload): Promise<Do
     return doc
   }
 
-  const headers = await authHeaders()
   const form = new FormData()
   form.append('file', {
     uri: payload.file.uri,
@@ -150,14 +150,29 @@ export async function uploadDocument(payload: UploadDocumentPayload): Promise<Do
   if (payload.description) form.append('description', payload.description)
   if (payload.subject) form.append('subject', payload.subject)
 
-  const res = await fetch(`${API_BASE_URL}/api/documents`, {
+  const token = await getStoredToken()
+  const response = await fetch(`${API_BASE_URL}/api/documents/upload`, {
     method: 'POST',
-    headers,
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
     body: form,
   })
-  const json: ApiResponse<DocumentItem> = await res.json()
-  if (!json.data) throw new Error(json.message || 'Upload failed')
-  return json.data
+
+  if (!response.ok) {
+    let errorMessage = 'Upload failed'
+    try {
+      const errorData = await response.json()
+      errorMessage = errorData.message || errorMessage
+    } catch (e) {
+      // Ignore JSON parse error if response is not JSON
+    }
+    throw new Error(errorMessage)
+  }
+
+  const data = await response.json()
+  if (!data.data) throw new Error('Upload failed')
+  return trimDoc(data.data)
 }
 
 export async function updateDocument(
@@ -172,15 +187,12 @@ export async function updateDocument(
     return updated
   }
 
-  const headers = await authHeaders()
-  const res = await fetch(`${API_BASE_URL}/api/documents/${id}`, {
-    method: 'PUT',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const json: ApiResponse<DocumentItem> = await res.json()
-  if (!json.data) throw new Error(json.message || 'Update failed')
-  return json.data
+  const { data } = await apiClient.put<ApiResponse<DocumentItem>>(
+    `/api/documents/${id}`,
+    payload,
+  )
+  if (!data.data) throw new Error(data.message || 'Update failed')
+  return data.data
 }
 
 export async function deleteDocument(id: string): Promise<void> {
@@ -189,9 +201,5 @@ export async function deleteDocument(id: string): Promise<void> {
     return
   }
 
-  const headers = await authHeaders()
-  await fetch(`${API_BASE_URL}/api/documents/${id}`, {
-    method: 'DELETE',
-    headers,
-  })
+  await apiClient.delete(`/api/documents/${id}`)
 }

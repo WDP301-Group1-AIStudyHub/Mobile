@@ -1,24 +1,24 @@
 export const LightColors = {
-  // Backgrounds — warm light cosmos
+  // Backgrounds — warm light cosmos (dùng cho cards/surfaces, không phải nền màn hình)
   background: '#f7f5ed',
   backgroundTop: '#fffdfa',
   backgroundMid: '#f1f5fb',
   backgroundBottom: '#f7f2e6',
-  card: 'rgba(255, 255, 252, 0.75)',
-  cardBorder: 'rgba(155, 170, 220, 0.55)',
-  cardElevated: 'rgba(255, 255, 255, 0.90)',
-  cardShadowColor: '#17244e',
+  card: 'rgba(255, 255, 252, 0.18)',
+  cardBorder: 'rgba(200, 210, 255, 0.35)',
+  cardElevated: 'rgba(255, 255, 255, 0.22)',
+  cardShadowColor: '#000000',
 
   // Brand
-  primary: '#4f63d2',
-  primaryLight: '#6b7ff0',
-  primaryDim: 'rgba(79, 99, 210, 0.1)',
-  secondary: '#2563eb',
-  secondaryDim: 'rgba(37, 99, 235, 0.1)',
-  accent: '#7c3aed',
-  accentTeal: '#0d9488',
-  accentGold: '#c9860e',
-  accentCoral: '#e05a48',
+  primary: '#7b8ff5',
+  primaryLight: '#a5b0ff',
+  primaryDim: 'rgba(123, 143, 245, 0.18)',
+  secondary: '#60a5fa',
+  secondaryDim: 'rgba(96, 165, 250, 0.18)',
+  accent: '#c084fc',
+  accentTeal: '#2dd4bf',
+  accentGold: '#fbbf24',
+  accentCoral: '#fb7185',
 
   // Gradients
   gradientPrimary: ['#4f63d2', '#6d28d9'] as const,
@@ -26,33 +26,33 @@ export const LightColors = {
   gradientGold: ['#d97706', '#f59e0b'] as const,
   gradientBg: ['#fffdfa', '#f1f5fb', '#f7f2e6'] as const,
 
-  // Text
-  text: '#1a2340',
-  textSecondary: '#344470',
-  muted: '#6b7a9f',
-  mutedLight: '#8a94b8',
+  // Text — PHẢI sáng vì background luôn là video tối
+  text: '#eef0ff',
+  textSecondary: '#c5ccf0',
+  muted: '#9aa3c8',
+  mutedLight: '#7480a8',
 
   // Semantic
-  success: '#16a34a',
-  successDim: 'rgba(22, 163, 74, 0.1)',
-  error: '#dc2626',
-  errorDim: 'rgba(220, 38, 38, 0.08)',
-  warning: '#d97706',
-  warningDim: 'rgba(217, 119, 6, 0.1)',
-  info: '#0ea5e9',
-  infoDim: 'rgba(14, 165, 233, 0.1)',
+  success: '#4ade80',
+  successDim: 'rgba(74, 222, 128, 0.12)',
+  error: '#f87171',
+  errorDim: 'rgba(248, 113, 113, 0.12)',
+  warning: '#fbbf24',
+  warningDim: 'rgba(251, 191, 36, 0.12)',
+  info: '#38bdf8',
+  infoDim: 'rgba(56, 189, 248, 0.12)',
 
   // Overlay
-  overlay: 'rgba(247, 245, 237, 0.85)',
-  overlayDark: 'rgba(26, 35, 64, 0.06)',
+  overlay: 'rgba(247, 245, 237, 0.15)',
+  overlayDark: 'rgba(0, 0, 0, 0.35)',
 
-  // Decorative (light mode cosmos dots + nebulas)
-  starColor: 'rgba(31, 47, 100, 0.16)',
-  starBright: 'rgba(31, 47, 100, 0.32)',
-  nebulaBlue: 'rgba(65, 145, 235, 0.13)',
-  nebulaGold: 'rgba(220, 165, 60, 0.14)',
-  nebulaTeal: 'rgba(31, 184, 175, 0.09)',
-  nebulaViolet: 'rgba(109, 40, 217, 0.07)',
+  // Decorative — sáng hơn để nổi trên video
+  starColor: 'rgba(255, 255, 255, 0.30)',
+  starBright: 'rgba(255, 255, 255, 0.65)',
+  nebulaBlue: 'rgba(65, 145, 235, 0.20)',
+  nebulaGold: 'rgba(220, 165, 60, 0.18)',
+  nebulaTeal: 'rgba(31, 184, 175, 0.14)',
+  nebulaViolet: 'rgba(140, 60, 250, 0.12)',
 }
 
 // Dark mode palette — deep space cosmos

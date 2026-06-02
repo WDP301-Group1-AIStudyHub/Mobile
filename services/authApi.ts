@@ -1,4 +1,6 @@
+import axios from 'axios'
 import { clearAuthSession, getStoredToken, getStoredUser, storeAuthSession } from './authStorage'
+// Note: axios is kept for isAxiosError used in handleAxiosError
 import type {
   ApiResponse,
   AuthResponse,
@@ -8,9 +10,8 @@ import type {
   RegisterPayload,
   UpdateProfilePayload,
 } from '../types/auth'
+import apiClient from './apiClient'
 
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/+$/, '') || 'http://localhost:3000'
 const USE_MOCK_AUTH = process.env.EXPO_PUBLIC_AUTH_MOCK === '1'
 
 export class AuthApiError extends Error {
@@ -22,11 +23,7 @@ export class AuthApiError extends Error {
   }
 }
 
-type RequestOptions = {
-  authenticated?: boolean
-  body?: unknown
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
-}
+// ── Mock helpers ─────────────────────────────────────────────────────────────
 
 function createMockUser(payload: Pick<LoginPayload, 'email'> & Partial<RegisterPayload>): AuthUser {
   const now = new Date().toISOString()
@@ -52,48 +49,32 @@ async function storeMockSession(user: AuthUser): Promise<AuthUser> {
   return user
 }
 
-async function request<T>(
-  path: string,
-  { authenticated = false, body, method = 'GET' }: RequestOptions = {},
-): Promise<ApiResponse<T>> {
-  const headers: Record<string, string> = {}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-  if (body !== undefined) {
-    headers['Content-Type'] = 'application/json'
+function handleAxiosError(error: unknown): never {
+  if (axios.isAxiosError(error)) {
+    const message = error.response?.data?.message || error.message || 'Request failed'
+    const status = error.response?.status ?? 500
+    throw new AuthApiError(message, status)
   }
-
-  if (authenticated) {
-    const token = await getStoredToken()
-    if (token) headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-
-  const json: ApiResponse<T> = await res.json()
-
-  if (!res.ok) {
-    throw new AuthApiError(json.message || 'Request failed', res.status)
-  }
-
-  return json
+  throw error
 }
+
+// ── Auth API ──────────────────────────────────────────────────────────────────
 
 export async function login(payload: LoginPayload): Promise<AuthUser> {
   if (USE_MOCK_AUTH) {
     return storeMockSession(createMockUser(payload))
   }
 
-  const res = await request<AuthResponse>('/api/auth/login', {
-    method: 'POST',
-    body: payload,
-  })
-  if (!res.data) throw new AuthApiError('No data returned', 500)
-  await storeAuthSession(res.data.accessToken, res.data.user)
-  return res.data.user
+  try {
+    const { data } = await apiClient.post<ApiResponse<AuthResponse>>('/api/auth/login', payload)
+    if (!data.data) throw new AuthApiError('No data returned', 500)
+    await storeAuthSession(data.data.accessToken, data.data.user)
+    return data.data.user
+  } catch (error) {
+    return handleAxiosError(error)
+  }
 }
 
 export async function register(payload: RegisterPayload): Promise<AuthUser> {
@@ -101,19 +82,24 @@ export async function register(payload: RegisterPayload): Promise<AuthUser> {
     return storeMockSession(createMockUser(payload))
   }
 
-  const res = await request<AuthResponse>('/api/auth/register', {
-    method: 'POST',
-    body: payload,
-  })
-  if (!res.data) throw new AuthApiError('No data returned', 500)
-  await storeAuthSession(res.data.accessToken, res.data.user)
-  return res.data.user
+  try {
+    const { data } = await apiClient.post<ApiResponse<AuthResponse>>('/api/auth/register', payload)
+    if (!data.data) throw new AuthApiError('No data returned', 500)
+    await storeAuthSession(data.data.accessToken, data.data.user)
+    return data.data.user
+  } catch (error) {
+    return handleAxiosError(error)
+  }
 }
 
 export async function forgotPassword(payload: ForgotPasswordPayload): Promise<void> {
   if (USE_MOCK_AUTH) return
 
-  await request('/api/auth/forgot-password', { method: 'POST', body: payload })
+  try {
+    await apiClient.post('/api/auth/forgot-password', payload)
+  } catch (error) {
+    return handleAxiosError(error)
+  }
 }
 
 export async function resetPassword(payload: {
@@ -122,7 +108,8 @@ export async function resetPassword(payload: {
 }): Promise<void> {
   if (USE_MOCK_AUTH) return
 
-  await request('/api/auth/reset-password', { method: 'POST', body: payload })
+  // TODO: BE chưa có endpoint /api/auth/reset-password — stub để tránh lỗi runtime
+  console.warn('[authApi] resetPassword: endpoint not implemented on server yet', payload)
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {
@@ -132,9 +119,13 @@ export async function getCurrentUser(): Promise<AuthUser> {
     throw new AuthApiError('No mock session found', 401)
   }
 
-  const res = await request<AuthUser>('/api/auth/me', { authenticated: true })
-  if (!res.data) throw new AuthApiError('No data returned', 500)
-  return res.data
+  try {
+    const { data } = await apiClient.get<ApiResponse<AuthUser>>('/api/auth/me')
+    if (!data.data) throw new AuthApiError('No data returned', 500)
+    return data.data
+  } catch (error) {
+    return handleAxiosError(error)
+  }
 }
 
 export async function updateProfile(payload: UpdateProfilePayload): Promise<AuthUser> {
@@ -150,13 +141,13 @@ export async function updateProfile(payload: UpdateProfilePayload): Promise<Auth
     return updated
   }
 
-  const res = await request<AuthUser>('/api/auth/profile', {
-    method: 'PUT',
-    authenticated: true,
-    body: payload,
-  })
-  if (!res.data) throw new AuthApiError('No data returned', 500)
-  return res.data
+  try {
+    const { data } = await apiClient.put<ApiResponse<AuthUser>>('/api/auth/profile', payload)
+    if (!data.data) throw new AuthApiError('No data returned', 500)
+    return data.data
+  } catch (error) {
+    return handleAxiosError(error)
+  }
 }
 
 export async function changePassword(payload: {
@@ -165,13 +156,16 @@ export async function changePassword(payload: {
 }): Promise<void> {
   if (USE_MOCK_AUTH) return
 
-  await request('/api/auth/change-password', {
-    method: 'POST',
-    authenticated: true,
-    body: payload,
-  })
+  // TODO: BE chưa có endpoint /api/auth/change-password — stub để tránh lỗi runtime
+  console.warn('[authApi] changePassword: endpoint not implemented on server yet', payload)
 }
 
 export async function logout(): Promise<void> {
+  // Call BE for server-side logging / future token invalidation
+  try {
+    await apiClient.post('/api/auth/logout')
+  } catch {
+    // Ignore network errors on logout — local session is cleared regardless
+  }
   await clearAuthSession()
 }
