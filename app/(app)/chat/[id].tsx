@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -19,6 +20,7 @@ import VideoBg from '../../../components/ui/VideoBg'
 import { FontSize, Spacing, Radius } from '../../../constants/colors'
 import { useColors } from '../../../contexts/ThemeContext'
 import { listDocuments } from '../../../services/documentApi'
+import { askQuestion, getChatHistory } from '../../../services/chatApi'
 import type { DocumentItem } from '../../../types/document'
 
 type Message = {
@@ -37,13 +39,15 @@ const initialMessages: Message[] = [
   },
 ]
 
-function getSemesterLabel(isoDate: string): string {
+function getSemesterLabel(isoDate: string | undefined): string {
+  if (!isoDate) return 'Unknown'
   const d = new Date(isoDate)
+  if (isNaN(d.getTime())) return 'Unknown'
   const year = d.getFullYear()
   const month = d.getMonth() + 1 // 1-based
-  if (month >= 9 || month <= 1) return `Học kỳ 1 - ${month <= 1 ? year : year}`
-  if (month >= 2 && month <= 5) return `Học kỳ 2 - ${year}`
-  return `Học kỳ Hè - ${year}`
+  if (month >= 9 || month <= 1) return `Semester 1 - ${year}`
+  if (month >= 2 && month <= 5) return `Semester 2 - ${year}`
+  return `Summer - ${year}`
 }
 
 type SemesterGroup = {
@@ -55,7 +59,7 @@ function groupDocsBySemester(docs: DocumentItem[]): SemesterGroup[] {
   const map = new Map<string, Map<string, DocumentItem[]>>()
   for (const doc of docs) {
     const sem = getSemesterLabel(doc.createdAt)
-    const subj = doc.subject?.trim() || 'Chưa phân loại'
+    const subj = doc.subject?.trim() || 'Uncategorized'
     if (!map.has(sem)) map.set(sem, new Map())
     const subjMap = map.get(sem)!
     if (!subjMap.has(subj)) subjMap.set(subj, [])
@@ -78,15 +82,55 @@ export default function ChatConversationPage() {
   const listRef = useRef<FlatList>(null)
 
   const [docs, setDocs] = useState<DocumentItem[]>([])
+  const [docsLoading, setDocsLoading] = useState(false)
   const [showDocPanel, setShowDocPanel] = useState(false)
   const [pinnedDoc, setPinnedDoc] = useState<DocumentItem | null>(null)
   const [expandedSem, setExpandedSem] = useState<string | null>(null)
 
   const isNewChat = id === 'new'
 
+  // Load documents for the attachment panel
+  const loadDocs = async () => {
+    setDocsLoading(true)
+    try {
+      const result = await listDocuments()
+      console.log('[Chat] listDocuments raw result:', JSON.stringify(result)?.slice(0, 200))
+      const list = Array.isArray(result) ? result : []
+      console.log('[Chat] docs count:', list.length)
+      setDocs(list)
+      // Auto-expand the first semester group so docs are visible immediately
+      if (list.length > 0) {
+        const firstSem = getSemesterLabel(list[0].createdAt)
+        setExpandedSem(firstSem)
+      }
+    } catch (err) {
+      console.error('[Chat] loadDocs error:', err)
+      setDocs([])
+    } finally {
+      setDocsLoading(false)
+    }
+  }
+
+  useEffect(() => { loadDocs() }, [])
+
+  // Refresh docs every time the panel opens
   useEffect(() => {
-    listDocuments().then(setDocs).catch(() => {})
-  }, [])
+    if (showDocPanel) loadDocs()
+  }, [showDocPanel])
+
+  // Load existing chat history when opening a saved conversation
+  useEffect(() => {
+    if (isNewChat) return
+    getChatHistory(id)
+      .then((item) => {
+        const time = new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        setMessages([
+          { id: 'user-0', role: 'user', content: item.question, time },
+          { id: 'ai-0', role: 'assistant', content: item.answer, time },
+        ])
+      })
+      .catch(() => {}) // Nếu không load được thì giữ initialMessages
+  }, [id, isNewChat])
 
   const semesterGroups = groupDocsBySemester(docs)
 
@@ -99,34 +143,52 @@ export default function ChatConversationPage() {
     const text = input.trim()
     if (!text || loading) return
 
-    const pinPrefix = pinnedDoc
-      ? `[Tài liệu: "${pinnedDoc.title}"${pinnedDoc.subject ? ` — ${pinnedDoc.subject}` : ''}]\n`
-      : ''
-
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: pinPrefix + text,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      content: text,
+      time: now,
     }
 
     setMessages((prev) => [...prev, userMsg])
     setInput('')
-    setPinnedDoc(null)
     setLoading(true)
 
-    setTimeout(() => {
+    try {
+      const result = await askQuestion({
+        question: text,
+        documentId: pinnedDoc?.id,
+        subject: pinnedDoc?.subject,
+        mode: 'basic',
+      })
+      setPinnedDoc(null)
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: pinnedDoc
-          ? `Đã nhận tài liệu "${pinnedDoc.title}". Dựa trên nội dung tài liệu, đây là phân tích của tôi về "${text}"...`
-          : `I understand you're asking about "${text}". Based on your uploaded study materials, here's what I found...`,
+        content: result.answer,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       }
       setMessages((prev) => [...prev, aiMsg])
+    } catch (e) {
+      const rawMsg = e instanceof Error ? e.message : 'An error occurred. Please try again.'
+      const isIndexError =
+        rawMsg.toLowerCase().includes('pinecone') ||
+        rawMsg.toLowerCase().includes('dimension') ||
+        rawMsg.toLowerCase().includes('index') ||
+        rawMsg.toLowerCase().includes('embed')
+      const errMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: isIndexError
+          ? 'Your question has been received. The AI document search feature is currently under maintenance. You can still ask general knowledge questions.'
+          : rawMsg,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }
+      setMessages((prev) => [...prev, errMsg])
+    } finally {
       setLoading(false)
-    }, 1200)
+    }
   }
 
   const renderMessage = ({ item }: { item: Message }) => {
@@ -337,7 +399,8 @@ export default function ChatConversationPage() {
     borderTopRightRadius: 24,
     padding: Spacing.lg,
     paddingBottom: Spacing.xxl,
-    maxHeight: '75%',
+    maxHeight: '80%',
+    minHeight: 320,
   },
   sheetHandle: {
     alignSelf: 'center',
@@ -377,7 +440,7 @@ export default function ChatConversationPage() {
     fontSize: FontSize.sm,
     color: C.muted,
   },
-  panelScroll: { flex: 1 },
+  panelScroll: { flex: 1, minHeight: 120 },
   semSection: {
     marginBottom: Spacing.sm,
   },
@@ -556,9 +619,10 @@ export default function ChatConversationPage() {
                 placeholder="Ask anything about your studies..."
                   placeholderTextColor={C.muted}
                 value={input}
-                onChangeText={setInput}
+                onChangeText={(text) => {
+                  if (text.length <= 2000) setInput(text)
+                }}
                 multiline
-                maxLength={2000}
                 onSubmitEditing={sendMessage}
               />
 
@@ -590,18 +654,23 @@ export default function ChatConversationPage() {
             <View style={styles.panelHeader}>
               <View style={styles.panelHeaderLeft}>
                 <BookOpen size={18} color={C.primary} />
-                <Text style={styles.panelTitle}>Chọn tài liệu</Text>
+                <Text style={styles.panelTitle}>Select Document</Text>
               </View>
               <Pressable onPress={() => setShowDocPanel(false)} hitSlop={8}>
                 <X size={20} color={C.muted} />
               </Pressable>
             </View>
-            <Text style={styles.panelSubtitle}>Chọn tài liệu để ghim vào khung chat</Text>
+            <Text style={styles.panelSubtitle}>Select a document to pin to your chat</Text>
 
-            {docs.length === 0 ? (
+            {docsLoading ? (
+              <View style={styles.panelEmpty}>
+                <ActivityIndicator size="small" color={C.primary} />
+                <Text style={styles.panelEmptyText}>Loading documents...</Text>
+              </View>
+            ) : docs.length === 0 ? (
               <View style={styles.panelEmpty}>
                 <FileText size={32} color={C.muted} strokeWidth={1.5} />
-                <Text style={styles.panelEmptyText}>Chưa có tài liệu nào</Text>
+                <Text style={styles.panelEmptyText}>No documents yet</Text>
               </View>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false} style={styles.panelScroll}>

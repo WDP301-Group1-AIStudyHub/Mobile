@@ -39,16 +39,18 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function fileTypeColorFn(type: string, C: ReturnType<typeof useColors>): string {
+function fileTypeColorFn(type: string | undefined, C: ReturnType<typeof useColors>): string {
+  if (!type) return C.muted
   if (type.includes('pdf')) return C.error
   if (type.includes('epub')) return C.secondary
   if (type.includes('word') || type.includes('docx')) return C.info
   return C.muted
 }
 
-function fileTypeLabel(type: string): string {
+function fileTypeLabel(type: string | undefined): string {
+  if (!type) return 'FILE'
   if (type.includes('pdf')) return 'PDF'
-  if (type.includes('epub')) return 'EPUB'
+  if (type.includes('epub')) return 'EPUB' 
   if (type.includes('word') || type.includes('docx')) return 'DOCX'
   return 'FILE'
 }
@@ -73,7 +75,7 @@ export default function LibraryPage() {
   const loadDocs = async () => {
     try {
       const data = await listDocuments()
-      setDocs(data)
+      setDocs(Array.isArray(data) ? data : [])
     } catch {
       setDocs([])
     } finally {
@@ -97,16 +99,42 @@ export default function LibraryPage() {
     setShowModal(true)
   }
 
+  const resetForm = () => {
+    setPickedFile(null)
+    setFormTitle('')
+    setFormSubject('')
+    setFormDesc('')
+  }
+
   const handlePickFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ['application/pdf', 'application/epub+zip', 'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-      copyToCacheDirectory: true,
-    })
-    if (result.canceled || !result.assets?.[0]) return
-    const asset = result.assets[0]
-    setPickedFile({ uri: asset.uri, name: asset.name, type: asset.mimeType ?? 'application/octet-stream', size: asset.size })
-    if (!formTitle) setFormTitle(asset.name.replace(/\.[^/.]+$/, ''))
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'text/plain',
+          'text/markdown'
+        ],
+        copyToCacheDirectory: true,
+      })
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        const file = res.assets[0]
+        setPickedFile({
+          uri: file.uri,
+          name: file.name,
+          type: file.mimeType || 'application/octet-stream',
+          size: file.size,
+        })
+        if (!formTitle) {
+          const nameWithoutExt = file.name.split('.').slice(0, -1).join('.') || file.name
+          setFormTitle(nameWithoutExt)
+        }
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Could not pick file.')
+    }
   }
 
   const handleSubmitUpload = async () => {
@@ -121,9 +149,28 @@ export default function LibraryPage() {
         description: formDesc.trim() || undefined,
       })
       setShowModal(false)
+      resetForm()
       await loadDocs()
     } catch (e) {
-      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Something went wrong.')
+      const msg = e instanceof Error ? e.message : 'Something went wrong.'
+      // Pinecone/RAG indexing errors mean the document WAS saved but indexing failed.
+      // Still reload the list and show a softer warning.
+      const isIndexError =
+        msg.toLowerCase().includes('pinecone') ||
+        msg.toLowerCase().includes('dimension') ||
+        msg.toLowerCase().includes('index') ||
+        msg.toLowerCase().includes('embed')
+      if (isIndexError) {
+        setShowModal(false)
+        resetForm()
+        await loadDocs()
+        Alert.alert(
+          'Uploaded (partial)',
+          'Your document was saved successfully. AI search indexing is temporarily unavailable — you can still use the document normally.',
+        )
+      } else {
+        Alert.alert('Upload failed', msg)
+      }
     } finally {
       setUploading(false)
     }
@@ -140,7 +187,7 @@ export default function LibraryPage() {
           onPress: async () => {
             try {
               await deleteDocument(doc.id)
-              setDocs((prev) => prev.filter((d) => d.id !== doc.id))
+              setDocs((prev) => (Array.isArray(prev) ? prev : []).filter((d) => d.id !== doc.id))
             } catch {
               Alert.alert('Error', 'Could not delete document.')
             }
@@ -150,10 +197,10 @@ export default function LibraryPage() {
     )
   }
 
-  const filtered = docs.filter(
+  const filtered = (Array.isArray(docs) ? docs : []).filter(
     (d) =>
-      d.title.toLowerCase().includes(search.toLowerCase()) ||
-      d.subject?.toLowerCase().includes(search.toLowerCase()),
+      (d.title || '').toLowerCase().includes(search.toLowerCase()) ||
+      (d.subject || '').toLowerCase().includes(search.toLowerCase()),
   )
 
   const renderDoc = ({ item }: { item: DocumentItem }) => {
@@ -580,7 +627,7 @@ export default function LibraryPage() {
                 >
                   <FolderOpen size={18} color={pickedFile ? C.primary : C.muted} />
                   <Text style={[styles.filePickerText, pickedFile && styles.filePickerTextSelected]} numberOfLines={1}>
-                    {pickedFile ? pickedFile.name : 'Choose PDF, EPUB or DOCXâ€¦'}
+                    {pickedFile ? pickedFile.name : 'Choose PDF, DOCX, PPTX, XLSX, TXT, or MD'}
                   </Text>
                 </Pressable>
               </View>
@@ -603,7 +650,7 @@ export default function LibraryPage() {
                 <Text style={styles.fieldLabel}>Subject</Text>
                 <TextInput
                   style={styles.textField}
-                  placeholder="e.g. Physics, Mathematicsâ€¦"
+                  placeholder="e.g. Physics, Mathematic"
                   placeholderTextColor={C.muted}
                   value={formSubject}
                   onChangeText={setFormSubject}
@@ -616,7 +663,7 @@ export default function LibraryPage() {
                 <Text style={styles.fieldLabel}>Description</Text>
                 <TextInput
                   style={[styles.textField, styles.textArea]}
-                  placeholder="Brief description of this documentâ€¦"
+                  placeholder="Brief description of this document"
                   placeholderTextColor={C.muted}
                   value={formDesc}
                   onChangeText={setFormDesc}
@@ -643,7 +690,7 @@ export default function LibraryPage() {
                   ? <UploadCloud size={18} color="#fff" />
                   : <Plus size={18} color="#fff" />}
                 <Text style={styles.submitText}>
-                  {uploading ? 'Uploadingâ€¦' : 'Upload Document'}
+                  {uploading ? 'Uploading' : 'Upload Document'}
                 </Text>
               </LinearGradient>
             </Pressable>

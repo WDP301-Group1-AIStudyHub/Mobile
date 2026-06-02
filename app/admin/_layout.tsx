@@ -112,6 +112,7 @@ function AdminHeader() {
 }
 
 export default function AdminLayout() {
+  const C = useColors()
 
   const styles = useMemo(() => StyleSheet.create({
   tabBar: {
