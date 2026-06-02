@@ -8,3 +8,8 @@ expo-env.d.ts
 node_modules/
 .expo/
 expo-start.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
