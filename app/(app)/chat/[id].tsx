@@ -15,20 +15,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 import { ArrowLeft, BookOpen, ChevronDown, ChevronRight, FileText, Paperclip, Send, Sparkles, X } from 'lucide-react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import VideoBg from '../../../components/ui/VideoBg'
 import { FontSize, Spacing, Radius } from '../../../constants/colors'
 import { useColors } from '../../../contexts/ThemeContext'
 import { listDocuments } from '../../../services/documentApi'
 import { askQuestion, getChatHistory } from '../../../services/chatApi'
 import type { DocumentItem } from '../../../types/document'
-
-type Message = {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  time: string
-}
+import { type Message, getSemesterLabel, getSubjectName, groupDocsBySemester } from '../../../utils/chatHelpers'
 
 const initialMessages: Message[] = [
   {
@@ -38,40 +30,6 @@ const initialMessages: Message[] = [
     time: '10:00 AM',
   },
 ]
-
-function getSemesterLabel(isoDate: string | undefined): string {
-  if (!isoDate) return 'Unknown'
-  const d = new Date(isoDate)
-  if (isNaN(d.getTime())) return 'Unknown'
-  const year = d.getFullYear()
-  const month = d.getMonth() + 1 // 1-based
-  if (month >= 9 || month <= 1) return `Semester 1 - ${year}`
-  if (month >= 2 && month <= 5) return `Semester 2 - ${year}`
-  return `Summer - ${year}`
-}
-
-type SemesterGroup = {
-  label: string
-  subjects: { subject: string; docs: DocumentItem[] }[]
-}
-
-function groupDocsBySemester(docs: DocumentItem[]): SemesterGroup[] {
-  const map = new Map<string, Map<string, DocumentItem[]>>()
-  for (const doc of docs) {
-    const sem = getSemesterLabel(doc.createdAt)
-    const subj = doc.subject?.trim() || 'Uncategorized'
-    if (!map.has(sem)) map.set(sem, new Map())
-    const subjMap = map.get(sem)!
-    if (!subjMap.has(subj)) subjMap.set(subj, [])
-    subjMap.get(subj)!.push(doc)
-  }
-  return Array.from(map.entries())
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([label, subjMap]) => ({
-      label,
-      subjects: Array.from(subjMap.entries()).map(([subject, docs]) => ({ subject, docs })),
-    }))
-}
 
 export default function ChatConversationPage() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -94,9 +52,7 @@ export default function ChatConversationPage() {
     setDocsLoading(true)
     try {
       const result = await listDocuments()
-      console.log('[Chat] listDocuments raw result:', JSON.stringify(result)?.slice(0, 200))
       const list = Array.isArray(result) ? result : []
-      console.log('[Chat] docs count:', list.length)
       setDocs(list)
       // Auto-expand the first semester group so docs are visible immediately
       if (list.length > 0) {
@@ -129,7 +85,7 @@ export default function ChatConversationPage() {
           { id: 'ai-0', role: 'assistant', content: item.answer, time },
         ])
       })
-      .catch(() => {}) // Nếu không load được thì giữ initialMessages
+      .catch(() => {}) // If chat history fails to load, keep initialMessages
   }, [id, isNewChat])
 
   const semesterGroups = groupDocsBySemester(docs)
@@ -159,7 +115,7 @@ export default function ChatConversationPage() {
       const result = await askQuestion({
         question: text,
         documentId: pinnedDoc?.id,
-        subject: pinnedDoc?.subject,
+        subject: getSubjectName(pinnedDoc?.subject, ''),
         mode: 'basic',
       })
       setPinnedDoc(null)
@@ -197,14 +153,9 @@ export default function ChatConversationPage() {
       <View style={[styles.msgRow, isUser ? styles.msgRowUser : styles.msgRowAi]}>
         {!isUser && (
           <View style={styles.aiAvatar}>
-                <LinearGradient
-                  colors={C.gradientPrimary}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.aiAvatarGrad}
-                >
+                <View style={[styles.aiAvatarGrad, { backgroundColor: C.primary }]} >
                   <Sparkles size={14} color="#fff" />
-                </LinearGradient>
+                </View>
               </View>
         )}
         <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAi]}>
@@ -232,7 +183,7 @@ export default function ChatConversationPage() {
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: C.cardBorder,
-    backgroundColor: 'rgba(255,255,252,0.92)',
+    backgroundColor: 'transparent',
   },
   backBtn: {
     width: 36,
@@ -258,7 +209,7 @@ export default function ChatConversationPage() {
   headerTitle: {
     fontSize: FontSize.base,
     fontWeight: '600',
-    color: C.text,
+    color: '#ffffff',
   },
   msgList: {
     padding: Spacing.lg,
@@ -329,7 +280,7 @@ export default function ChatConversationPage() {
   inputArea: {
     borderTopWidth: 1,
     borderTopColor: C.cardBorder,
-    backgroundColor: 'rgba(255,255,252,0.97)',
+    backgroundColor: 'transparent',
   },
   pinnedRow: {
     flexDirection: 'row',
@@ -394,7 +345,7 @@ export default function ChatConversationPage() {
     justifyContent: 'flex-end',
   },
   panelSheet: {
-    backgroundColor: C.background,
+    backgroundColor: C.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: Spacing.lg,
@@ -543,7 +494,7 @@ export default function ChatConversationPage() {
 
 
   return (
-    <VideoBg>
+    <View style={{ flex: 1 }}>
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView
           style={styles.flex}
@@ -577,14 +528,9 @@ export default function ChatConversationPage() {
               loading ? (
                 <View style={[styles.msgRow, styles.msgRowAi]}>
                   <View style={styles.aiAvatar}>
-                  <LinearGradient
-                    colors={C.gradientPrimary}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.aiAvatarGrad}
-                  >
+                  <View style={[styles.aiAvatarGrad, { backgroundColor: C.primary }]} >
                     <Sparkles size={14} color="#fff" />
-                  </LinearGradient>
+                  </View>
                 </View>
                   <View style={[styles.bubble, styles.bubbleAi]}>
                     <Text style={styles.typingIndicator}>●●●</Text>
@@ -602,7 +548,7 @@ export default function ChatConversationPage() {
                 <FileText size={13} color={C.primary} />
                 <Text style={styles.pinnedText} numberOfLines={1}>
                   {pinnedDoc.title}
-                  {pinnedDoc.subject ? ` · ${pinnedDoc.subject}` : ''}
+                  {getSubjectName(pinnedDoc.subject, '') ? ` · ${getSubjectName(pinnedDoc.subject, '')}` : ''}
                 </Text>
                 <Pressable onPress={() => setPinnedDoc(null)} hitSlop={8}>
                   <X size={13} color={C.muted} />
@@ -627,14 +573,9 @@ export default function ChatConversationPage() {
               />
 
               <Pressable onPress={sendMessage} disabled={!input.trim() || loading}>
-                <LinearGradient
-                  colors={input.trim() && !loading ? C.gradientPrimary : [C.cardBorder, C.cardBorder]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.sendBtn}
-                >
+                <View style={[styles.sendBtn, { backgroundColor: C.primary }]} >
                   <Send size={18} color={input.trim() && !loading ? '#fff' : C.muted} />
-                </LinearGradient>
+                </View>
               </Pressable>
             </View>
           </View>
@@ -649,7 +590,7 @@ export default function ChatConversationPage() {
         onRequestClose={() => setShowDocPanel(false)}
       >
         <Pressable style={styles.panelOverlay} onPress={() => setShowDocPanel(false)}>
-          <Pressable style={styles.panelSheet} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.panelSheet} onStartShouldSetResponder={() => true}>
             <View style={styles.sheetHandle} />
             <View style={styles.panelHeader}>
               <View style={styles.panelHeaderLeft}>
@@ -724,7 +665,7 @@ export default function ChatConversationPage() {
                               </View>
                               {pinnedDoc?.id === doc.id && (
                                 <View style={styles.pinnedBadge}>
-                                  <Text style={styles.pinnedBadgeText}>Đã ghim</Text>
+                                  <Text style={styles.pinnedBadgeText}>Pinned</Text>
                                 </View>
                               )}
                             </Pressable>
@@ -735,10 +676,9 @@ export default function ChatConversationPage() {
                 ))}
               </ScrollView>
             )}
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
-    </VideoBg>
+    </View>
   )
-
 }

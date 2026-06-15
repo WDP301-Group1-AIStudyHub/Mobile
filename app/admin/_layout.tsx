@@ -1,11 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Tabs, router } from 'expo-router'
 import { Activity, FileText, LayoutGrid, ShieldCheck, Users, X } from 'lucide-react-native'
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import { View, Text, Pressable, StyleSheet, Platform, ActivityIndicator } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
+import { useAuth } from '../../hooks/useAuth'
 
 const adminTabStyles = StyleSheet.create({
   tabIconWrap: {
@@ -29,7 +29,7 @@ function TabIcon({
   const C = useColors()
   return (
     <View style={[adminTabStyles.tabIconWrap, focused && { backgroundColor: `${color}18` }]}>
-      <Icon size={20} color={focused ? color : C.muted} strokeWidth={focused ? 2.2 : 1.7} />
+      <Icon size={20} color={focused ? color : (C.background === 'transparent' ? '#000000' : C.muted)} strokeWidth={focused ? 2.2 : 2.5} />
     </View>
   )
 }
@@ -87,14 +87,9 @@ function AdminHeader() {
   return (
     <View style={[hStyles.adminHeader, { paddingTop: insets.top + 8 }]}>
       <View style={hStyles.adminHeaderLeft}>
-        <LinearGradient
-          colors={['#7c3aed', '#4f63d2']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={hStyles.adminHeaderIcon}
-        >
+        <View style={[hStyles.adminHeaderIcon, { backgroundColor: C ? C.primary : '#3b82f6' }]} >
           <ShieldCheck size={16} color="#fff" />
-        </LinearGradient>
+        </View>
         <View>
           <Text style={hStyles.adminEyebrow}>Admin Panel</Text>
           <Text style={hStyles.adminTitle}>AIStudyHub</Text>
@@ -113,10 +108,28 @@ function AdminHeader() {
 
 export default function AdminLayout() {
   const C = useColors()
+  const { state, signOut } = useAuth()
+
+  // Safety net: 5s loading timeout
+  useEffect(() => {
+    if (state.status !== 'loading') return
+    const t = setTimeout(() => {
+      console.warn('[admin/_layout] auth loading timeout, forcing unauth')
+      signOut()
+    }, 5000)
+    return () => clearTimeout(t)
+  }, [state.status, signOut])
+
+  // Auth guard: redirect to login if not authenticated
+  useEffect(() => {
+    if (state.status === 'unauthenticated') {
+      router.replace('/(auth)/login')
+    }
+  }, [state.status])
 
   const styles = useMemo(() => StyleSheet.create({
   tabBar: {
-    backgroundColor: C.background,
+    backgroundColor: C.card,
     borderTopWidth: 1,
     borderTopColor: C.cardBorder,
     height: Platform.OS === 'ios' ? 80 : 62,
@@ -126,21 +139,30 @@ export default function AdminLayout() {
     shadowOpacity: 0,
   },
   tabLabel: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '800',
     marginTop: -2,
   },
 }), [C])
 
+  if (state.status !== 'authenticated') {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' }}>
+        <ActivityIndicator size="large" color={C.primary} />
+      </View>
+    )
+  }
+
   return (
     <Tabs
       screenOptions={{
+        sceneStyle: { backgroundColor: 'transparent' },
         headerShown: true,
         header: () => <AdminHeader />,
         tabBarStyle: styles.tabBar,
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.tabLabel,
-        tabBarInactiveTintColor: C.muted,
+        tabBarInactiveTintColor: C.background === 'transparent' ? '#000000' : C.muted,
       }}
     >
       <Tabs.Screen

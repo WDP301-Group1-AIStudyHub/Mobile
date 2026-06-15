@@ -13,7 +13,6 @@ import {
   Filter,
   Search,
 } from 'lucide-react-native'
-import VideoBg from '../../components/ui/VideoBg'
 import Card from '../../components/ui/Card'
 import Input from '../../components/ui/Input'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
@@ -269,10 +268,9 @@ export default function ActivityPage() {
 }), [C])
 
   return (
-    <VideoBg>
-      <SafeAreaView style={styles.safe}>
-        {/* Search + Count */}
-        <View style={styles.searchRow}>
+    <SafeAreaView style={styles.safe}>
+      {/* Search + Count */}
+      <View style={styles.searchRow}>
           <View style={styles.searchFlex}>
             <Input
               placeholder="Search actor, target, or activity"
@@ -367,6 +365,5 @@ export default function ActivityPage() {
           }
         />
       </SafeAreaView>
-    </VideoBg>
   )
 }

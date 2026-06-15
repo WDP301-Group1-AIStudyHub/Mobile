@@ -11,7 +11,6 @@ import {
 import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowLeft, Eye, EyeOff, Lock } from 'lucide-react-native'
-import VideoBg from '../../components/ui/VideoBg'
 import BrandLogo from '../../components/ui/BrandLogo'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
@@ -186,9 +185,8 @@ export default function ResetPasswordPage() {
 }), [C])
 
   return (
-    <VideoBg>
-      <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
@@ -293,6 +291,5 @@ export default function ResetPasswordPage() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </VideoBg>
   )
 }

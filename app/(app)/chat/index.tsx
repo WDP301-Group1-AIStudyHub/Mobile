@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Animated,
-  Dimensions,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -29,19 +27,17 @@ import {
   Sparkles,
   Trash2,
   X,
+  Info,
 } from 'lucide-react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import VideoBg from '../../../components/ui/VideoBg'
 import { FontSize, Radius, Spacing } from '../../../constants/colors'
 import { useColors } from '../../../contexts/ThemeContext'
 import { listDocuments } from '../../../services/documentApi'
 import { askQuestion, deleteChatHistory, getChatHistory, listChatHistory } from '../../../services/chatApi'
 import type { ChatHistoryItem } from '../../../types/chat'
 import type { DocumentItem } from '../../../types/document'
+import { getSubjectName, getSemesterLabel, groupDocsBySemester, type SemesterGroup } from '../../../utils/chatHelpers'
 
-const DRAWER_WIDTH = Dimensions.get('window').width * 0.82
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const DRAWER_WIDTH = 300
 
 type Message = { id: string; role: 'user' | 'assistant'; content: string; time: string }
 
@@ -64,55 +60,34 @@ function timeAgo(isoDate: string): string {
   return `${days}d ago`
 }
 
-function getSemesterLabel(isoDate: string | undefined): string {
-  if (!isoDate) return 'Unknown'
-  const d = new Date(isoDate)
-  if (isNaN(d.getTime())) return 'Unknown'
-  const year = d.getFullYear()
-  const month = d.getMonth() + 1
-  if (month >= 9 || month <= 1) return `Semester 1 - ${year}`
-  if (month >= 2 && month <= 5) return `Semester 2 - ${year}`
-  return `Summer - ${year}`
+// Info banner at the top of the chat list
+function PageDescription() {
+  const C = useColors()
+  return (
+    <View style={{ paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, backgroundColor: C.primaryDim, borderRadius: Radius.md, marginHorizontal: Spacing.md, marginBottom: Spacing.sm }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Info size={14} color={C.primary} />
+        <Text style={{ fontSize: FontSize.xs, color: C.primary, flex: 1, lineHeight: 18 }}>
+          Chat with AI to ask questions about your documents. Select a specific document to get more accurate answers.
+        </Text>
+      </View>
+    </View>
+  )
 }
-
-type SemesterGroup = { label: string; subjects: { subject: string; docs: DocumentItem[] }[] }
-
-function groupDocsBySemester(docs: DocumentItem[]): SemesterGroup[] {
-  const map = new Map<string, Map<string, DocumentItem[]>>()
-  for (const doc of docs) {
-    const sem = getSemesterLabel(doc.createdAt)
-    const subj = doc.subject?.trim() || 'Uncategorized'
-    if (!map.has(sem)) map.set(sem, new Map())
-    const subjMap = map.get(sem)!
-    if (!subjMap.has(subj)) subjMap.set(subj, [])
-    subjMap.get(subj)!.push(doc)
-  }
-  return Array.from(map.entries())
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([label, subjMap]) => ({
-      label,
-      subjects: Array.from(subjMap.entries()).map(([subject, docs]) => ({ subject, docs })),
-    }))
-}
-
-// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ChatIndexPage() {
   const C = useColors()
 
-  // ── Chat state ──────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<Message[]>([WELCOME_MSG])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const listRef = useRef<FlatList>(null)
+  const isMountedRef = useRef(true)
 
-  // ── History drawer ──────────────────────────────────────────────────────────
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current
   const [histories, setHistories] = useState<ChatHistoryItem[]>([])
   const [histLoading, setHistLoading] = useState(false)
 
-  // ── Doc panel ───────────────────────────────────────────────────────────────
   const [docs, setDocs] = useState<DocumentItem[]>([])
   const [docsLoading, setDocsLoading] = useState(false)
   const [showDocPanel, setShowDocPanel] = useState(false)
@@ -121,61 +96,44 @@ export default function ChatIndexPage() {
 
   const semesterGroups = groupDocsBySemester(docs)
 
-  // ── Load docs ────────────────────────────────────────────────────────────────
   const loadDocs = async () => {
     setDocsLoading(true)
     try {
       const result = await listDocuments()
       const list = Array.isArray(result) ? result : []
-      setDocs(list)
-      if (list.length > 0) setExpandedSem(getSemesterLabel(list[0].createdAt))
+      if (isMountedRef.current) setDocs(list)
+      if (isMountedRef.current && list.length > 0) setExpandedSem(getSemesterLabel(list[0].createdAt))
     } catch {
-      setDocs([])
+      if (isMountedRef.current) setDocs([])
     } finally {
-      setDocsLoading(false)
+      if (isMountedRef.current) setDocsLoading(false)
     }
   }
 
-  useEffect(() => { loadDocs() }, [])
+  useEffect(() => { isMountedRef.current = true; loadDocs(); return () => { isMountedRef.current = false } }, [])
   useEffect(() => { if (showDocPanel) loadDocs() }, [showDocPanel])
 
-  // ── Load history ─────────────────────────────────────────────────────────────
   const loadHistory = useCallback(async () => {
     setHistLoading(true)
     try {
       const result = await listChatHistory()
-      setHistories(Array.isArray(result.histories) ? result.histories : [])
+      if (isMountedRef.current) setHistories(Array.isArray(result.histories) ? result.histories : [])
     } catch {
-      setHistories([])
+      if (isMountedRef.current) setHistories([])
     } finally {
-      setHistLoading(false)
+      if (isMountedRef.current) setHistLoading(false)
     }
   }, [])
 
-  // ── Drawer animation ─────────────────────────────────────────────────────────
   const openDrawer = () => {
     loadHistory()
     setDrawerOpen(true)
-    Animated.spring(drawerAnim, {
-      toValue: 0,
-      useNativeDriver: true,
-      damping: 20,
-      stiffness: 180,
-    }).start()
   }
 
-  const closeDrawer = (onDone?: () => void) => {
-    Animated.timing(drawerAnim, {
-      toValue: -DRAWER_WIDTH,
-      duration: 220,
-      useNativeDriver: true,
-    }).start(() => {
-      setDrawerOpen(false)
-      onDone?.()
-    })
+  const closeDrawer = () => {
+    setDrawerOpen(false)
   }
 
-  // ── Delete history item ───────────────────────────────────────────────────────
   const handleDelete = (item: ChatHistoryItem) => {
     Alert.alert('Delete Conversation', 'Are you sure you want to delete this conversation?', [
       { text: 'Cancel', style: 'cancel' },
@@ -194,51 +152,37 @@ export default function ChatIndexPage() {
     ])
   }
 
-  // ── Open saved chat ───────────────────────────────────────────────────────────
   const openSavedChat = (item: ChatHistoryItem) => {
-    // Đóng drawer TRƯỚC, sau khi animation xong mới fetch + set state
-    // Tránh crash do state update khi component đang re-render từ animation
-    closeDrawer(async () => {
-      try {
-        const detail = await getChatHistory(item.id)
-        const time = new Date(detail.createdAt).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-        setMessages([
-          { id: 'user-0', role: 'user', content: detail.question, time },
-          { id: 'ai-0', role: 'assistant', content: detail.answer, time },
-        ])
-      } catch {
-        // Nếu API lỗi → hiển thị nội dung có sẵn từ list (không navigate)
-        const time = new Date(item.createdAt).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-        setMessages([
-          { id: 'user-0', role: 'user', content: item.question, time },
-          { id: 'ai-0', role: 'assistant', content: item.answer, time },
-        ])
-      }
-    })
-  }
-
-  // ── New chat ──────────────────────────────────────────────────────────────────
-  const newChat = () => {
-    if (drawerOpen) {
-      closeDrawer(() => {
-        setMessages([WELCOME_MSG])
-        setInput('')
-        setPinnedDoc(null)
+    closeDrawer()
+    try {
+      const detail = { createdAt: item.createdAt, question: item.question, answer: item.answer }
+      const time = new Date(detail.createdAt).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
       })
-    } else {
-      setMessages([WELCOME_MSG])
-      setInput('')
-      setPinnedDoc(null)
+      setMessages([
+        { id: 'user-0', role: 'user', content: detail.question, time },
+        { id: 'ai-0', role: 'assistant', content: detail.answer, time },
+      ])
+    } catch {
+      const time = new Date(item.createdAt).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+      setMessages([
+        { id: 'user-0', role: 'user', content: item.question, time },
+        { id: 'ai-0', role: 'assistant', content: item.answer, time },
+      ])
     }
   }
 
-  // ── Send message ──────────────────────────────────────────────────────────────
+  const newChat = () => {
+    closeDrawer()
+    setMessages([WELCOME_MSG])
+    setInput('')
+    setPinnedDoc(null)
+  }
+
   const sendMessage = async () => {
     const text = input.trim()
     if (!text || sending) return
@@ -253,9 +197,10 @@ export default function ChatIndexPage() {
       const result = await askQuestion({
         question: text,
         documentId: pinnedDoc?.id,
-        subject: pinnedDoc?.subject,
+        subject: getSubjectName(pinnedDoc?.subject, ''),
         mode: 'basic',
       })
+      if (!isMountedRef.current) return
       setPinnedDoc(null)
       setMessages((prev) => [
         ...prev,
@@ -267,7 +212,8 @@ export default function ChatIndexPage() {
         },
       ])
     } catch (e) {
-      const rawMsg = e instanceof Error ? e.message : 'Có lỗi xảy ra.'
+      if (!isMountedRef.current) return
+      const rawMsg = e instanceof Error ? e.message : 'Something went wrong.'
       const isIndexError =
         rawMsg.toLowerCase().includes('pinecone') ||
         rawMsg.toLowerCase().includes('dimension') ||
@@ -285,20 +231,17 @@ export default function ChatIndexPage() {
         },
       ])
     } finally {
-      setSending(false)
+      if (isMountedRef.current) setSending(false)
     }
   }
 
-  // ── Render message ─────────────────────────────────────────────────────────────
   const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.role === 'user'
     return (
       <View style={[S.msgRow, isUser ? S.msgRowUser : S.msgRowAi]}>
         {!isUser && (
-          <View style={S.aiAvatar}>
-            <LinearGradient colors={C.gradientPrimary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={S.aiAvatarGrad}>
-              <Sparkles size={14} color="#fff" />
-            </LinearGradient>
+          <View style={[S.aiAvatar, { backgroundColor: C.primary }]}>
+            <Sparkles size={14} color="#fff" />
           </View>
         )}
         <View style={[S.bubble, isUser ? S.bubbleUser : S.bubbleAi]}>
@@ -311,14 +254,12 @@ export default function ChatIndexPage() {
     )
   }
 
-  // ── Styles ──────────────────────────────────────────────────────────────────
   const S = useMemo(
     () =>
       StyleSheet.create({
         safe: { flex: 1 },
         flex: { flex: 1 },
 
-        // Header
         header: {
           flexDirection: 'row',
           alignItems: 'center',
@@ -339,15 +280,13 @@ export default function ChatIndexPage() {
         },
         headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
         aiDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.success },
-        headerTitle: { fontSize: FontSize.base, fontWeight: '700', color: C.text },
+        headerTitle: { fontSize: FontSize.base, fontWeight: '700', color: '#ffffff' },
 
-        // Messages
         msgList: { padding: Spacing.md, gap: Spacing.md, paddingBottom: Spacing.xl },
         msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm },
         msgRowUser: { justifyContent: 'flex-end' },
         msgRowAi: { justifyContent: 'flex-start' },
-        aiAvatar: { width: 30, height: 30, borderRadius: 10, overflow: 'hidden', flexShrink: 0 },
-        aiAvatarGrad: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+        aiAvatar: { width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
         bubble: { maxWidth: '78%', borderRadius: 16, padding: Spacing.md, gap: 6 },
         bubbleUser: { backgroundColor: C.primary, borderBottomRightRadius: 4 },
         bubbleAi: { backgroundColor: C.card, borderWidth: 1, borderColor: C.cardBorder, borderBottomLeftRadius: 4 },
@@ -358,17 +297,16 @@ export default function ChatIndexPage() {
         msgTimeAi: { color: C.muted },
         typingDot: { color: C.muted, fontSize: FontSize.sm, letterSpacing: 3 },
 
-        // Input
         inputArea: { borderTopWidth: 1, borderTopColor: C.cardBorder, backgroundColor: 'transparent' },
         pinnedRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: Spacing.md, paddingTop: Spacing.sm, paddingBottom: 4 },
         pinnedText: { flex: 1, fontSize: FontSize.xs, color: C.primary, fontWeight: '600' },
         inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: Spacing.md },
-        attachBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: C.primaryDim, borderWidth: 1, borderColor: `${C.primary}30`, alignItems: 'center', justifyContent: 'center' },
-        attachBtnActive: { borderColor: C.primary },
+        attachBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: C.primaryDim, borderWidth: 1, borderColor: C.primary, alignItems: 'center', justifyContent: 'center' },
+        attachBtnActive: { backgroundColor: C.primary },
         textInput: { flex: 1, minHeight: 42, maxHeight: 120, backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder, borderRadius: 14, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, fontSize: FontSize.sm, color: C.text },
-        sendBtn: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+        sendBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
+        sendBtnDisabled: { backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder },
 
-        // Drawer
         drawerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 100 },
         drawer: {
           position: 'absolute',
@@ -376,7 +314,7 @@ export default function ChatIndexPage() {
           top: 0,
           bottom: 0,
           width: DRAWER_WIDTH,
-          backgroundColor: C.background,
+          backgroundColor: C.card,
           zIndex: 101,
           paddingTop: Platform.OS === 'ios' ? 54 : 36,
           shadowColor: '#000',
@@ -386,13 +324,12 @@ export default function ChatIndexPage() {
           elevation: 24,
         },
         drawerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md, borderBottomWidth: 1, borderBottomColor: C.cardBorder },
-        drawerTitle: { fontSize: FontSize.lg, fontWeight: '800', color: C.text },
+        drawerTitle: { fontSize: FontSize.lg, fontWeight: '800', color: '#ffffff' },
         drawerCloseBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: C.primaryDim, alignItems: 'center', justifyContent: 'center' },
-        newChatBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginHorizontal: Spacing.md, marginTop: Spacing.md, marginBottom: Spacing.sm, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, borderRadius: 12, overflow: 'hidden' },
-        newChatGrad: { ...StyleSheet.absoluteFillObject, borderRadius: 12 },
+        newChatBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginHorizontal: Spacing.md, marginTop: Spacing.md, marginBottom: Spacing.sm, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, borderRadius: 12, backgroundColor: C.primary },
         newChatText: { fontSize: FontSize.sm, fontWeight: '700', color: '#fff' },
         sectionLabel: { fontSize: FontSize.xs, fontWeight: '700', color: C.muted, letterSpacing: 0.8, textTransform: 'uppercase', paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm },
-        histItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: `${C.cardBorder}60` },
+        histItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: C.cardBorder },
         histIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: C.primaryDim, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
         histInfo: { flex: 1, gap: 2 },
         histTitle: { fontSize: FontSize.sm, fontWeight: '600', color: C.text },
@@ -401,9 +338,8 @@ export default function ChatIndexPage() {
         emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, paddingTop: 48 },
         emptyText: { fontSize: FontSize.sm, color: C.muted, textAlign: 'center' },
 
-        // Doc panel
         panelOverlay: { flex: 1, backgroundColor: 'rgba(10,14,26,0.55)', justifyContent: 'flex-end' },
-        panelSheet: { backgroundColor: C.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.lg, paddingBottom: Spacing.xxl, maxHeight: '80%', minHeight: 320 },
+        panelSheet: { backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.lg, paddingBottom: Spacing.xxl, maxHeight: '80%', minHeight: 320 },
         sheetHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: C.cardBorder, marginBottom: Spacing.sm },
         panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
         panelHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
@@ -435,30 +371,28 @@ export default function ChatIndexPage() {
   )
 
   return (
-    <VideoBg>
+    <View style={{ flex: 1 }}>
       <SafeAreaView style={S.safe}>
         <KeyboardAvoidingView style={S.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
 
-          {/* ── Header ── */}
+          {/* Header */}
           <View style={S.header}>
-            {/* History menu button */}
             <Pressable onPress={openDrawer} style={S.headerBtn}>
               <AlignLeft size={20} color={C.mutedLight} />
             </Pressable>
-
-            {/* Title */}
             <View style={S.headerCenter}>
               <View style={S.aiDot} />
               <Text style={S.headerTitle}>AI Assistant</Text>
             </View>
-
-            {/* New chat button */}
             <Pressable onPress={newChat} style={S.headerBtn}>
               <Plus size={20} color={C.mutedLight} />
             </Pressable>
           </View>
 
-          {/* ── Messages ── */}
+          {/* Page Description */}
+          <PageDescription />
+
+          {/* Messages */}
           <FlatList
             ref={listRef}
             data={messages}
@@ -471,25 +405,24 @@ export default function ChatIndexPage() {
               sending ? (
                 <View style={[S.msgRow, S.msgRowAi]}>
                   <View style={S.aiAvatar}>
-                    <LinearGradient colors={C.gradientPrimary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={S.aiAvatarGrad}>
-                      <Sparkles size={14} color="#fff" />
-                    </LinearGradient>
+                    <Sparkles size={14} color="#fff" />
                   </View>
                   <View style={[S.bubble, S.bubbleAi]}>
-                    <Text style={S.typingDot}>●●●</Text>
+                    <Text style={S.typingDot}>...</Text>
                   </View>
                 </View>
               ) : null
             }
           />
 
-          {/* ── Input area ── */}
+          {/* Input area */}
           <View style={S.inputArea}>
             {pinnedDoc && (
               <View style={S.pinnedRow}>
                 <FileText size={13} color={C.primary} />
                 <Text style={S.pinnedText} numberOfLines={1}>
-                  {pinnedDoc.title}{pinnedDoc.subject ? ` · ${pinnedDoc.subject}` : ''}
+                  {pinnedDoc.title}
+                  {getSubjectName(pinnedDoc.subject, '') ? ` · ${getSubjectName(pinnedDoc.subject, '')}` : ''}
                 </Text>
                 <Pressable onPress={() => setPinnedDoc(null)} hitSlop={8}>
                   <X size={13} color={C.muted} />
@@ -498,7 +431,7 @@ export default function ChatIndexPage() {
             )}
             <View style={S.inputBar}>
               <Pressable style={[S.attachBtn, showDocPanel && S.attachBtnActive]} onPress={() => setShowDocPanel(true)}>
-                <Paperclip size={20} color={showDocPanel ? C.primary : C.muted} />
+                <Paperclip size={20} color={showDocPanel ? '#fff' : C.primary} />
               </Pressable>
               <TextInput
                 style={S.textInput}
@@ -509,29 +442,23 @@ export default function ChatIndexPage() {
                 multiline
                 onSubmitEditing={sendMessage}
               />
-              <Pressable onPress={sendMessage} disabled={!input.trim() || sending}>
-                <LinearGradient
-                  colors={input.trim() && !sending ? C.gradientPrimary : [C.cardBorder, C.cardBorder]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                  style={S.sendBtn}
-                >
-                  <Send size={18} color={input.trim() && !sending ? '#fff' : C.muted} />
-                </LinearGradient>
+              <Pressable
+                onPress={sendMessage}
+                disabled={!input.trim() || sending}
+                style={[S.sendBtn, (!input.trim() || sending) && S.sendBtnDisabled]}
+              >
+                <Send size={18} color={input.trim() && !sending ? '#fff' : C.muted} />
               </Pressable>
             </View>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
 
-      {/* ── History Drawer ── */}
+      {/* History Drawer */}
       {drawerOpen && (
         <>
-          {/* Overlay */}
           <Pressable style={S.drawerOverlay} onPress={() => closeDrawer()} />
-
-          {/* Drawer panel */}
-          <Animated.View style={[S.drawer, { transform: [{ translateX: drawerAnim }] }]}>
-            {/* Drawer Header */}
+          <View style={S.drawer}>
             <View style={S.drawerHeader}>
               <Text style={S.drawerTitle}>History</Text>
               <Pressable onPress={() => closeDrawer()} style={S.drawerCloseBtn}>
@@ -539,14 +466,11 @@ export default function ChatIndexPage() {
               </Pressable>
             </View>
 
-            {/* New Chat button */}
             <Pressable style={S.newChatBtn} onPress={newChat}>
-              <LinearGradient colors={C.gradientPrimary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={S.newChatGrad} />
               <Plus size={16} color="#fff" />
               <Text style={S.newChatText}>New Chat</Text>
             </Pressable>
 
-            {/* History list */}
             {histLoading ? (
               <View style={S.emptyBox}>
                 <ActivityIndicator size="small" color={C.primary} />
@@ -572,7 +496,7 @@ export default function ChatIndexPage() {
                       </View>
                       <View style={S.histInfo}>
                         <Text style={S.histTitle} numberOfLines={1}>{item.question}</Text>
-                        <Text style={S.histMeta}>{timeAgo(item.createdAt)} · {item.mode === 'corrective' ? 'Corrective RAG' : 'Basic RAG'}</Text>
+                        <Text style={S.histMeta}>{timeAgo(item.createdAt)}</Text>
                       </View>
                       <Pressable style={S.histDeleteBtn} onPress={() => handleDelete(item)} hitSlop={8}>
                         <Trash2 size={15} color={C.muted} />
@@ -582,14 +506,14 @@ export default function ChatIndexPage() {
                 </ScrollView>
               </>
             )}
-          </Animated.View>
+          </View>
         </>
       )}
 
-      {/* ── Document Selector Panel ── */}
+      {/* Document Selector Panel */}
       <Modal visible={showDocPanel} transparent animationType="slide" onRequestClose={() => setShowDocPanel(false)}>
         <Pressable style={S.panelOverlay} onPress={() => setShowDocPanel(false)}>
-          <Pressable style={S.panelSheet} onPress={(e) => e.stopPropagation()}>
+          <View style={S.panelSheet} onStartShouldSetResponder={() => true}>
             <View style={S.sheetHandle} />
             <View style={S.panelHeader}>
               <View style={S.panelHeaderLeft}>
@@ -652,7 +576,7 @@ export default function ChatIndexPage() {
                               </View>
                               {pinnedDoc?.id === doc.id && (
                                 <View style={S.pinnedBadge}>
-                                  <Text style={S.pinnedBadgeText}>Đã ghim</Text>
+                                  <Text style={S.pinnedBadgeText}>Pinned</Text>
                                 </View>
                               )}
                             </Pressable>
@@ -663,9 +587,9 @@ export default function ChatIndexPage() {
                 ))}
               </ScrollView>
             )}
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
-    </VideoBg>
+    </View>
   )
 }

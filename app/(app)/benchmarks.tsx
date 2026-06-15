@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Modal,
   Pressable,
@@ -8,110 +8,48 @@ import {
   TextInput,
   View,
   ActivityIndicator,
+  Alert,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { LinearGradient } from 'expo-linear-gradient'
 import {
   BarChart2,
   Plus,
   Play,
   Trophy,
-  Target,
-  Zap,
-  Brain,
-  CheckCircle2,
-  XCircle,
-  X,
-  ChevronRight,
   FlaskConical,
   TrendingUp,
   Award,
+  X,
 } from 'lucide-react-native'
-import VideoBg from '../../components/ui/VideoBg'
-import Card from '../../components/ui/Card'
 import BrandLogo from '../../components/ui/BrandLogo'
 import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
+import {
+  createBenchmarkQuestion,
+  getBenchmarkSummary,
+  listBenchmarkQuestions,
+  runBenchmarkQuestion,
+  type BenchmarkQuestion as ApiQuestion,
+  type BenchmarkDifficulty,
+  type BenchmarkSummary,
+} from '../../services/benchmarkApi'
 
-// ─── Mock data (replace with API calls) ─────────────────────────────────────
-
-type Difficulty = 'Easy' | 'Medium' | 'Hard'
-type WinnerMode = 'basic' | 'corrective' | 'tie' | null
-
-interface BenchmarkQuestion {
-  id: string
-  question: string
-  subject: string
-  difficulty: Difficulty
-  hasResult: boolean
-  winner: WinnerMode
-  basicScore: number | null
-  correctiveScore: number | null
-  createdAt: string
-}
-
-const MOCK_QUESTIONS: BenchmarkQuestion[] = [
-  {
-    id: '1',
-    question: 'Explain quantum entanglement and its applications in computing.',
-    subject: 'Quantum Physics',
-    difficulty: 'Hard',
-    hasResult: true,
-    winner: 'corrective',
-    basicScore: 72,
-    correctiveScore: 91,
-    createdAt: '2h ago',
-  },
-  {
-    id: '2',
-    question: 'What are the key differences between supervised and unsupervised learning?',
-    subject: 'Machine Learning',
-    difficulty: 'Medium',
-    hasResult: true,
-    winner: 'corrective',
-    basicScore: 80,
-    correctiveScore: 88,
-    createdAt: 'Yesterday',
-  },
-  {
-    id: '3',
-    question: 'Describe the structure of a transformer neural network.',
-    subject: 'Deep Learning',
-    difficulty: 'Hard',
-    hasResult: true,
-    winner: 'tie',
-    basicScore: 84,
-    correctiveScore: 84,
-    createdAt: '2 days ago',
-  },
-  {
-    id: '4',
-    question: 'What is photosynthesis and how does it work?',
-    subject: 'Biology',
-    difficulty: 'Easy',
-    hasResult: false,
-    winner: null,
-    basicScore: null,
-    correctiveScore: null,
-    createdAt: '3 days ago',
-  },
-]
-
-const MOCK_SUMMARY = {
-  totalRuns: 38,
-  basicAvg: 75,
-  correctiveAvg: 89,
-  correctiveWinRate: 71,
-  basicWinRate: 16,
-  tieRate: 13,
-  faithfulnessImprovement: '+18%',
-  correctnessImprovement: '+14%',
-}
+type Difficulty = BenchmarkDifficulty
 
 const DIFFICULTIES: Difficulty[] = ['Easy', 'Medium', 'Hard']
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const EMPTY_SUMMARY: BenchmarkSummary = {
+  totalRuns: 0,
+  basicAvg: 0,
+  correctiveAvg: 0,
+  correctiveWinRate: 0,
+  basicWinRate: 0,
+  tieRate: 0,
+  faithfulnessImprovement: '0%',
+  correctnessImprovement: '0%',
+}
 
 function difficultyColor(d: Difficulty, C: ReturnType<typeof useColors>): string {
   if (d === 'Easy') return C.success
@@ -119,66 +57,135 @@ function difficultyColor(d: Difficulty, C: ReturnType<typeof useColors>): string
   return C.error
 }
 
-function winnerLabel(w: WinnerMode) {
+function winnerLabel(w: ApiQuestion['winner']) {
   if (w === 'corrective') return 'Corrective'
   if (w === 'basic') return 'Basic'
   return 'Tie'
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+function timeAgo(iso?: string): string {
+  if (!iso) return 'recently'
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+// Page description
+function PageDescription() {
+  const C = useColors()
+  return (
+    <View style={{ marginBottom: Spacing.lg, paddingHorizontal: Spacing.xs }}>
+      <Text style={{ fontSize: FontSize.sm, color: C.textSecondary, lineHeight: 22 }}>
+        Compare answer quality between Basic RAG and Corrective RAG. Benchmarks help evaluate the accuracy and reliability of AI answers.
+      </Text>
+    </View>
+  )
+}
 
 export default function BenchmarksPage() {
   const C = useColors()
   const [showCreate, setShowCreate] = useState(false)
   const [runningId, setRunningId] = useState<string | null>(null)
-  const [questions, setQuestions] = useState<BenchmarkQuestion[]>(MOCK_QUESTIONS)
+  const [creating, setCreating] = useState(false)
+  const [questions, setQuestions] = useState<ApiQuestion[]>([])
+  const [summary, setSummary] = useState<BenchmarkSummary>(EMPTY_SUMMARY)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [selectedTab, setSelectedTab] = useState<'questions' | 'summary'>('questions')
+  const isMountedRef = useRef(true)
 
-  // Create form state
-  const [form, setForm] = useState({ question: '', subject: '', expectedAnswer: '', difficulty: 'Medium' as Difficulty })
+  useEffect(() => {
+    return () => { isMountedRef.current = false }
+  }, [])
 
-  function handleRun(id: string) {
+  const [form, setForm] = useState({
+    question: '',
+    subject: '',
+    expectedAnswer: '',
+    difficulty: 'Medium' as Difficulty,
+  })
+
+  const load = useCallback(async () => {
+    try {
+      const [qs, sm] = await Promise.all([
+        listBenchmarkQuestions(),
+        getBenchmarkSummary().catch(() => EMPTY_SUMMARY),
+      ])
+      if (isMountedRef.current) {
+        setQuestions(qs)
+        setSummary(sm)
+      }
+    } catch (e) {
+      console.error('[benchmarks] load error', e)
+      if (isMountedRef.current) Alert.alert('Error', 'Could not load benchmarks from the server.')
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  async function handleRun(id: string) {
     setRunningId(id)
-    // TODO: call POST /api/benchmark/run/:questionId
-    setTimeout(() => setRunningId(null), 2000)
+    try {
+      const updated = await runBenchmarkQuestion(id)
+      if (isMountedRef.current) setQuestions((prev) => prev.map((q) => (q.id === id ? updated : q)))
+      const sm = await getBenchmarkSummary()
+      if (isMountedRef.current) setSummary(sm)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Run failed'
+      Alert.alert('Error', msg)
+    } finally {
+      if (isMountedRef.current) setRunningId(null)
+    }
   }
 
-  function handleCreate() {
-    if (!form.question.trim() || !form.subject.trim()) return
-    const newQ: BenchmarkQuestion = {
-      id: Date.now().toString(),
-      question: form.question,
-      subject: form.subject,
-      difficulty: form.difficulty,
-      hasResult: false,
-      winner: null,
-      basicScore: null,
-      correctiveScore: null,
-      createdAt: 'Just now',
+  async function handleCreate() {
+    if (!form.question.trim() || !form.subject.trim()) {
+      Alert.alert('Validation', 'Question and subject are required.')
+      return
     }
-    setQuestions(prev => [newQ, ...prev])
-    setForm({ question: '', subject: '', expectedAnswer: '', difficulty: 'Medium' })
-    setShowCreate(false)
+    setCreating(true)
+    try {
+      const created = await createBenchmarkQuestion({
+        question: form.question.trim(),
+        subject: form.subject.trim(),
+        expectedAnswer: form.expectedAnswer.trim() || undefined,
+        difficulty: form.difficulty,
+      })
+      setQuestions((prev) => [created, ...prev])
+      setForm({ question: '', subject: '', expectedAnswer: '', difficulty: 'Medium' })
+      setShowCreate(false)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Create failed'
+      Alert.alert('Error', msg)
+    } finally {
+      setCreating(false)
+    }
   }
 
   const styles = useMemo(() => StyleSheet.create({
     safe: { flex: 1 },
     scroll: { flex: 1 },
     content: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 24, gap: Spacing.lg },
-
-    // Top bar
     topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     topBarRight: { flexDirection: 'row', gap: Spacing.sm },
-
-    // Header
     headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-    pageTitle: { fontSize: FontSize.xl, fontWeight: '700', color: C.text, letterSpacing: 0.2 },
+    pageTitle: { fontSize: FontSize.xl, fontWeight: '700', color: '#ffffff', letterSpacing: 0.2 },
     pageSub: { fontSize: FontSize.sm, color: C.muted, marginTop: 3, maxWidth: '75%' },
-    addBtn: { borderRadius: Radius.lg, overflow: 'hidden', marginTop: 2 },
-    addBtnGrad: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 9 },
+    addBtn: { borderRadius: Radius.lg, backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 9 },
     addBtnText: { fontSize: FontSize.sm, fontWeight: '700', color: '#fff' },
-
-    // Tab switcher
     tabRow: {
       flexDirection: 'row',
       backgroundColor: C.card,
@@ -192,8 +199,6 @@ export default function BenchmarksPage() {
     tabActive: { backgroundColor: C.primaryDim },
     tabText: { fontSize: FontSize.sm, fontWeight: '600', color: C.muted },
     tabTextActive: { color: C.primary },
-
-    // Summary stats
     statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
     statCard: {
       flex: 1, minWidth: '45%',
@@ -208,9 +213,7 @@ export default function BenchmarksPage() {
     statIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
     statVal: { fontSize: FontSize.xl, fontWeight: '800', color: C.text },
     statLabel: { fontSize: FontSize.xs, color: C.muted },
-
-    // Comparison banner
-    compBanner: { borderRadius: Radius.xl, overflow: 'hidden', borderWidth: 1, borderColor: C.cardBorder },
+    compBanner: { borderRadius: Radius.xl, borderWidth: 1, borderColor: C.cardBorder, backgroundColor: C.card, overflow: 'hidden' },
     compHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: Spacing.md, paddingBottom: 0 },
     compHeaderText: { fontSize: FontSize.base, fontWeight: '700', color: C.text },
     compRow: { flexDirection: 'row', gap: Spacing.sm, padding: Spacing.md },
@@ -231,6 +234,7 @@ export default function BenchmarksPage() {
       paddingHorizontal: 10,
       paddingVertical: 4,
       marginTop: 4,
+      backgroundColor: C.accent,
     },
     winnerBadgeText: { fontSize: FontSize.xs, fontWeight: '800', color: '#fff' },
     improvRow: { flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.md, paddingBottom: Spacing.md },
@@ -241,13 +245,9 @@ export default function BenchmarksPage() {
     },
     improvText: { fontSize: FontSize.sm, fontWeight: '700', color: C.success },
     improvLabel: { fontSize: FontSize.xs, color: C.muted },
-
-    // Section header
     sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     sectionTitle: { fontSize: FontSize.base, fontWeight: '700', color: C.text },
     sectionCount: { fontSize: FontSize.sm, color: C.muted },
-
-    // Question card
     qCard: {
       backgroundColor: C.card,
       borderRadius: Radius.lg,
@@ -277,24 +277,22 @@ export default function BenchmarksPage() {
       flexDirection: 'row', alignItems: 'center', gap: 4,
       paddingHorizontal: 10, paddingVertical: 5,
       borderRadius: Radius.full,
+      backgroundColor: C.accent,
     },
     winnerText: { fontSize: FontSize.xs, fontWeight: '700', color: '#fff' },
-    runBtn: { borderRadius: Radius.md, overflow: 'hidden', alignSelf: 'flex-end' },
-    runBtnGrad: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8 },
+    runBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: Radius.md, backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-end' },
     runBtnText: { fontSize: FontSize.sm, fontWeight: '700', color: '#fff' },
     pendingTag: {
       borderRadius: Radius.full, paddingHorizontal: 10, paddingVertical: 5,
       backgroundColor: C.warningDim, alignSelf: 'flex-start',
     },
     pendingText: { fontSize: FontSize.xs, fontWeight: '700', color: C.warning },
-
-    // Modal
-    modalOverlay: {
-      flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
-      justifyContent: 'flex-end',
-    },
+    empty: { alignItems: 'center', paddingTop: Spacing.xxl, gap: Spacing.sm },
+    emptyTitle: { fontSize: FontSize.md, fontWeight: '700', color: C.textSecondary },
+    emptyHint: { fontSize: FontSize.sm, color: C.muted, textAlign: 'center', maxWidth: 280, lineHeight: 20 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
     modalSheet: {
-      backgroundColor: C.backgroundMid,
+      backgroundColor: C.card,
       borderTopLeftRadius: Radius.xl,
       borderTopRightRadius: Radius.xl,
       borderWidth: 1,
@@ -327,100 +325,88 @@ export default function BenchmarksPage() {
       backgroundColor: C.card,
     },
     diffChipText: { fontSize: FontSize.sm, fontWeight: '700' },
-    submitBtn: { borderRadius: Radius.lg, overflow: 'hidden', marginTop: 4 },
-    submitBtnGrad: { padding: Spacing.md, alignItems: 'center' },
+    submitBtn: { borderRadius: Radius.lg, backgroundColor: C.primary, padding: Spacing.md, alignItems: 'center', marginTop: 4 },
     submitBtnText: { fontSize: FontSize.base, fontWeight: '700', color: '#fff' },
   }), [C])
 
-  // ─── Render summary tab ───────────────────────────────────────────────────
-
   function renderSummary() {
+    const s = summary
     return (
       <>
-        {/* Stats grid */}
         <View style={styles.statsGrid}>
           {[
-            { icon: FlaskConical, label: 'Total Runs', value: `${MOCK_SUMMARY.totalRuns}`, color: C.primary, bg: C.primaryDim },
-            { icon: BarChart2, label: 'Basic Avg', value: `${MOCK_SUMMARY.basicAvg}%`, color: C.info, bg: C.infoDim },
-            { icon: Brain, label: 'Corrective Avg', value: `${MOCK_SUMMARY.correctiveAvg}%`, color: C.accent, bg: `${C.accent}18` },
-            { icon: Trophy, label: 'Corrective Wins', value: `${MOCK_SUMMARY.correctiveWinRate}%`, color: C.accentGold, bg: C.warningDim },
-          ].map(s => (
-            <View key={s.label} style={styles.statCard}>
+            { icon: FlaskConical, label: 'Total Runs', value: `${s.totalRuns}`, color: C.primary, bg: C.primaryDim },
+            { icon: BarChart2, label: 'Basic Avg', value: `${s.basicAvg}%`, color: C.info, bg: C.infoDim },
+            { icon: BarChart2, label: 'Corrective Avg', value: `${s.correctiveAvg}%`, color: C.accent, bg: C.accentDim },
+            { icon: Trophy, label: 'Corrective Wins', value: `${s.correctiveWinRate}%`, color: C.accentGold, bg: C.warningDim },
+          ].map(st => (
+            <View key={st.label} style={styles.statCard}>
               <View style={styles.statIconRow}>
-                <View style={[styles.statIcon, { backgroundColor: s.bg }]}>
-                  <s.icon size={16} color={s.color} strokeWidth={2} />
+                <View style={[styles.statIcon, { backgroundColor: st.bg }]}>
+                  <st.icon size={16} color={st.color} strokeWidth={2} />
                 </View>
               </View>
-              <Text style={[styles.statVal, { color: s.color }]}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
+              <Text style={[styles.statVal, { color: st.color }]}>{st.value}</Text>
+              <Text style={styles.statLabel}>{st.label}</Text>
             </View>
           ))}
         </View>
 
-        {/* Comparison banner */}
-        <View style={[styles.compBanner, { backgroundColor: C.card }]}>
+        <View style={styles.compBanner}>
           <View style={styles.compHeader}>
             <BarChart2 size={16} color={C.primary} />
             <Text style={styles.compHeaderText}>Basic vs Corrective RAG</Text>
           </View>
           <View style={styles.compRow}>
-            {/* Basic */}
             <View style={[styles.compCol, { borderColor: `${C.info}40`, backgroundColor: C.infoDim }]}>
               <Text style={[styles.compColTitle, { color: C.info }]}>Basic RAG</Text>
-              <Text style={[styles.compScore, { color: C.info }]}>{MOCK_SUMMARY.basicAvg}</Text>
+              <Text style={[styles.compScore, { color: C.info }]}>{s.basicAvg}</Text>
               <Text style={styles.compLabel}>avg score</Text>
-              <Text style={[styles.compLabel, { color: C.info }]}>{MOCK_SUMMARY.basicWinRate}% wins</Text>
+              <Text style={[styles.compLabel, { color: C.info }]}>{s.basicWinRate}% wins</Text>
             </View>
             <Text style={styles.vsText}>VS</Text>
-            {/* Corrective */}
-            <View style={[styles.compCol, { borderColor: `${C.accent}40`, backgroundColor: `${C.accent}12` }]}>
-              <LinearGradient
-                colors={['transparent', `${C.accent}08`]}
-                style={[StyleSheet.absoluteFill, { borderRadius: Radius.lg }]}
-              />
+            <View style={[styles.compCol, { borderColor: `${C.accent}40`, backgroundColor: C.accentDim }]}>
               <Text style={[styles.compColTitle, { color: C.accent }]}>Corrective RAG</Text>
-              <Text style={[styles.compScore, { color: C.accent }]}>{MOCK_SUMMARY.correctiveAvg}</Text>
+              <Text style={[styles.compScore, { color: C.accent }]}>{s.correctiveAvg}</Text>
               <Text style={styles.compLabel}>avg score</Text>
-              <View style={[styles.winnerBadge, { backgroundColor: C.accent }]}>
-                <Text style={styles.winnerBadgeText}>🏆 {MOCK_SUMMARY.correctiveWinRate}% wins</Text>
+              <View style={styles.winnerBadge}>
+                <Text style={styles.winnerBadgeText}>{s.correctiveWinRate}% wins</Text>
               </View>
             </View>
           </View>
-          {/* Improvement pills */}
           <View style={styles.improvRow}>
             <View style={styles.improvPill}>
               <TrendingUp size={13} color={C.success} />
               <View>
-                <Text style={styles.improvText}>{MOCK_SUMMARY.faithfulnessImprovement}</Text>
+                <Text style={styles.improvText}>{s.faithfulnessImprovement}</Text>
                 <Text style={styles.improvLabel}>Faithfulness</Text>
               </View>
             </View>
             <View style={styles.improvPill}>
-              <CheckCircle2 size={13} color={C.success} />
+              <Award size={13} color={C.success} />
               <View>
-                <Text style={styles.improvText}>{MOCK_SUMMARY.correctnessImprovement}</Text>
+                <Text style={styles.improvText}>{s.correctnessImprovement}</Text>
                 <Text style={styles.improvLabel}>Correctness</Text>
               </View>
             </View>
           </View>
         </View>
 
-        {/* Win rate bar */}
-        <View style={[styles.qCard, { gap: Spacing.sm }]}>
+        <View style={styles.qCard}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Award size={15} color={C.accentGold} />
             <Text style={styles.sectionTitle}>Win Rate Distribution</Text>
           </View>
           <View style={{ flexDirection: 'row', height: 10, borderRadius: Radius.full, overflow: 'hidden', gap: 2 }}>
-            <View style={{ flex: MOCK_SUMMARY.correctiveWinRate, backgroundColor: C.accent, borderRadius: Radius.full }} />
-            <View style={{ flex: MOCK_SUMMARY.basicWinRate, backgroundColor: C.info, borderRadius: Radius.full }} />
-            <View style={{ flex: MOCK_SUMMARY.tieRate, backgroundColor: C.cardBorder, borderRadius: Radius.full }} />
+            <View style={{ flex: Math.max(0.01, s.correctiveWinRate), backgroundColor: C.accent, borderRadius: Radius.full }} />
+            <View style={{ flex: Math.max(0.01, s.basicWinRate), backgroundColor: C.info, borderRadius: Radius.full }} />
+            <View style={{ flex: Math.max(0.01, s.tieRate), backgroundColor: C.cardBorder, borderRadius: Radius.full }} />
           </View>
           <View style={{ flexDirection: 'row', gap: Spacing.md }}>
             {[
-              { color: C.accent, label: `Corrective ${MOCK_SUMMARY.correctiveWinRate}%` },
-              { color: C.info, label: `Basic ${MOCK_SUMMARY.basicWinRate}%` },
-              { color: C.muted, label: `Tie ${MOCK_SUMMARY.tieRate}%` },
+              { color: C.accent, label: `Corrective ${s.correctiveWinRate}%` },
+              { color: C.info, label: `Basic ${s.basicWinRate}%` },
+              { color: C.muted, label: `Tie ${s.tieRate}%` },
             ].map(l => (
               <View key={l.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                 <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: l.color }} />
@@ -433,55 +419,60 @@ export default function BenchmarksPage() {
     )
   }
 
-  // ─── Render questions tab ─────────────────────────────────────────────────
-
   function renderQuestions() {
+    if (questions.length === 0) {
+      return (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>
+            {loading ? 'Loading questions...' : 'No benchmark questions yet'}
+          </Text>
+          <Text style={styles.emptyHint}>
+            Tap "New" to create your first benchmark question.
+          </Text>
+        </View>
+      )
+    }
     return (
       <View style={{ gap: Spacing.sm }}>
         {questions.map(q => {
           const isRunning = runningId === q.id
+          const hasScore = q.hasResult && q.basicScore !== null && q.correctiveScore !== null
           return (
             <View key={q.id} style={styles.qCard}>
-              {/* Question text + difficulty */}
               <View style={styles.qTop}>
                 <Text style={styles.qText} numberOfLines={2}>{q.question}</Text>
               </View>
 
-              {/* Tags */}
               <View style={styles.qMeta}>
                 <View style={[styles.diffBadge, { backgroundColor: `${difficultyColor(q.difficulty, C)}20` }]}>
-                  <Text style={[styles.diffText, { color: difficultyColor(q.difficulty, C) }]}>{q.difficulty}</Text>
+                  <Text style={[styles.diffText, { color: difficultyColor(q.difficulty, C) }]}>
+                    {q.difficulty}
+                  </Text>
                 </View>
-                <View style={styles.subjectTag}>
-                  <Text style={styles.subjectText}>{q.subject}</Text>
-                </View>
-                <Text style={{ fontSize: FontSize.xs, color: C.muted }}>{q.createdAt}</Text>
+                {q.subject ? (
+                  <View style={styles.subjectTag}>
+                    <Text style={styles.subjectText}>{q.subject}</Text>
+                  </View>
+                ) : null}
+                <Text style={{ fontSize: FontSize.xs, color: C.muted }}>{timeAgo(q.createdAt)}</Text>
               </View>
 
-              {/* Result or Run button */}
-              {q.hasResult && q.basicScore !== null && q.correctiveScore !== null ? (
-                <View style={{ gap: Spacing.sm }}>
-                  <View style={styles.qResultRow}>
-                    {/* Basic score */}
-                    <View style={[styles.scoreBox, { borderColor: `${C.info}40`, backgroundColor: C.infoDim }]}>
-                      <Text style={[styles.scoreMode, { color: C.info }]}>Basic</Text>
-                      <Text style={[styles.scoreNum, { color: C.info }]}>{q.basicScore}</Text>
-                    </View>
-                    {/* VS */}
-                    <Text style={{ fontSize: FontSize.xs, color: C.muted, fontWeight: '700' }}>VS</Text>
-                    {/* Corrective score */}
-                    <View style={[styles.scoreBox, { borderColor: `${C.accent}40`, backgroundColor: `${C.accent}10` }]}>
-                      <Text style={[styles.scoreMode, { color: C.accent }]}>Corrective</Text>
-                      <Text style={[styles.scoreNum, { color: C.accent }]}>{q.correctiveScore}</Text>
-                    </View>
-                    {/* Winner */}
-                    <LinearGradient
-                      colors={q.winner === 'corrective' ? C.gradientPrimary : q.winner === 'basic' ? [C.info, C.secondary] : [C.muted, C.mutedLight]}
-                      style={styles.winnerPill}
-                    >
-                      <Trophy size={11} color="#fff" />
-                      <Text style={styles.winnerText}>{winnerLabel(q.winner)}</Text>
-                    </LinearGradient>
+              {hasScore ? (
+                <View style={styles.qResultRow}>
+                  <View style={[styles.scoreBox, { borderColor: `${C.info}40`, backgroundColor: C.infoDim }]}>
+                    <Text style={[styles.scoreMode, { color: C.info }]}>Basic</Text>
+                    <Text style={[styles.scoreNum, { color: C.info }]}>{q.basicScore}</Text>
+                  </View>
+                  <Text style={{ fontSize: FontSize.xs, color: C.muted, fontWeight: '700' }}>VS</Text>
+                  <View style={[styles.scoreBox, { borderColor: `${C.accent}40`, backgroundColor: C.accentDim }]}>
+                    <Text style={[styles.scoreMode, { color: C.accent }]}>Corrective</Text>
+                    <Text style={[styles.scoreNum, { color: C.accent }]}>{q.correctiveScore}</Text>
+                  </View>
+                  <View style={[styles.winnerPill, {
+                    backgroundColor: q.winner === 'corrective' ? C.accent : q.winner === 'basic' ? C.info : C.muted
+                  }]}>
+                    <Trophy size={11} color="#fff" />
+                    <Text style={styles.winnerText}>{winnerLabel(q.winner)}</Text>
                   </View>
                 </View>
               ) : (
@@ -489,14 +480,16 @@ export default function BenchmarksPage() {
                   <View style={styles.pendingTag}>
                     <Text style={styles.pendingText}>Pending run</Text>
                   </View>
-                  <Pressable style={styles.runBtn} onPress={() => handleRun(q.id)} disabled={isRunning}>
-                    <LinearGradient colors={C.gradientPrimary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.runBtnGrad}>
-                      {isRunning
-                        ? <ActivityIndicator size="small" color="#fff" />
-                        : <Play size={13} color="#fff" fill="#fff" />
-                      }
-                      <Text style={styles.runBtnText}>{isRunning ? 'Running…' : 'Run'}</Text>
-                    </LinearGradient>
+                  <Pressable
+                    style={[styles.runBtn, isRunning && { opacity: 0.7 }]}
+                    onPress={() => handleRun(q.id)}
+                    disabled={isRunning}
+                  >
+                    {isRunning
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Play size={13} color="#fff" fill="#fff" />
+                    }
+                    <Text style={styles.runBtnText}>{isRunning ? 'Running...' : 'Run'}</Text>
                   </Pressable>
                 </View>
               )}
@@ -507,47 +500,53 @@ export default function BenchmarksPage() {
     )
   }
 
-  // ─── Main render ─────────────────────────────────────────────────────────
-
   return (
-    <VideoBg>
+    <View style={{ flex: 1 }}>
       <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-
-          {/* Top bar */}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); load() }}
+              tintColor={C.primary}
+            />
+          }
+        >
           <View style={styles.topBar}>
-            <BrandLogo size="sm" />
+            <BrandLogo size={28} />
             <View style={styles.topBarRight}>
               <ThemeToggle />
             </View>
           </View>
 
-          {/* Header */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.pageTitle}>Benchmarks</Text>
               <Text style={styles.pageSub}>Compare Basic RAG vs Corrective RAG quality</Text>
             </View>
             <Pressable style={styles.addBtn} onPress={() => setShowCreate(true)}>
-              <LinearGradient colors={C.gradientPrimary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.addBtnGrad}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Plus size={15} color="#fff" strokeWidth={2.5} />
                 <Text style={styles.addBtnText}>New</Text>
-              </LinearGradient>
+              </View>
             </Pressable>
           </View>
 
-          {/* Tab switcher */}
+          <PageDescription />
+
           <View style={styles.tabRow}>
             {(['questions', 'summary'] as const).map(t => (
               <Pressable key={t} style={[styles.tab, selectedTab === t && styles.tabActive]} onPress={() => setSelectedTab(t)}>
                 <Text style={[styles.tabText, selectedTab === t && styles.tabTextActive]}>
-                  {t === 'questions' ? '📋  Questions' : '📊  Summary'}
+                  {t === 'questions' ? 'Questions' : 'Summary'}
                 </Text>
               </Pressable>
             ))}
           </View>
 
-          {/* Tab content */}
           {selectedTab === 'summary' ? renderSummary() : (
             <>
               <View style={styles.sectionRow}>
@@ -557,11 +556,9 @@ export default function BenchmarksPage() {
               {renderQuestions()}
             </>
           )}
-
-      </ScrollView>
+        </ScrollView>
       </SafeAreaView>
 
-      {/* Create Modal */}
       <Modal visible={showCreate} transparent animationType="slide" onRequestClose={() => setShowCreate(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
@@ -572,12 +569,11 @@ export default function BenchmarksPage() {
               </Pressable>
             </View>
 
-            {/* Question */}
             <View>
               <Text style={styles.inputLabel}>Question *</Text>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
-                placeholder="Enter the benchmark question…"
+                placeholder="Enter the benchmark question..."
                 placeholderTextColor={C.muted}
                 multiline
                 value={form.question}
@@ -585,7 +581,6 @@ export default function BenchmarksPage() {
               />
             </View>
 
-            {/* Subject */}
             <View>
               <Text style={styles.inputLabel}>Subject *</Text>
               <TextInput
@@ -597,12 +592,11 @@ export default function BenchmarksPage() {
               />
             </View>
 
-            {/* Expected Answer */}
             <View>
               <Text style={styles.inputLabel}>Expected Answer</Text>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
-                placeholder="Describe the expected answer for scoring…"
+                placeholder="Describe the expected answer for scoring..."
                 placeholderTextColor={C.muted}
                 multiline
                 value={form.expectedAnswer}
@@ -610,7 +604,6 @@ export default function BenchmarksPage() {
               />
             </View>
 
-            {/* Difficulty */}
             <View>
               <Text style={styles.inputLabel}>Difficulty</Text>
               <View style={styles.diffRow}>
@@ -626,15 +619,18 @@ export default function BenchmarksPage() {
               </View>
             </View>
 
-            {/* Submit */}
-            <Pressable style={styles.submitBtn} onPress={handleCreate}>
-              <LinearGradient colors={C.gradientPrimary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitBtnGrad}>
-                <Text style={styles.submitBtnText}>Create Question</Text>
-              </LinearGradient>
+            <Pressable
+              style={[styles.submitBtn, creating && { opacity: 0.7 }]}
+              onPress={handleCreate}
+              disabled={creating}
+            >
+              <Text style={styles.submitBtnText}>
+                {creating ? 'Creating...' : 'Create Question'}
+              </Text>
             </Pressable>
           </View>
         </View>
       </Modal>
-    </VideoBg>
+    </View>
   )
 }
