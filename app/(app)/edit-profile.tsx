@@ -11,8 +11,6 @@ import {
 import { router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowLeft, Camera, Check, User } from 'lucide-react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import VideoBg from '../../components/ui/VideoBg'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
@@ -89,7 +87,7 @@ export default function EditProfilePage() {
   pageTitle: {
     fontSize: FontSize.md,
     fontWeight: '700',
-    color: C.text,
+    color: '#ffffff',
     letterSpacing: -0.3,
   },
   avatarSection: {
@@ -211,9 +209,8 @@ export default function EditProfilePage() {
 }), [C])
 
   return (
-    <VideoBg>
-      <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
@@ -233,16 +230,11 @@ export default function EditProfilePage() {
 
             {/* Avatar */}
             <View style={styles.avatarSection}>
-              <LinearGradient
-                colors={C.gradientPrimary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.avatarRing}
-              >
+              <View style={[styles.avatarRing, { backgroundColor: C.primary }]} >
                 <View style={styles.avatarInner}>
                   <User size={40} color={C.primary} />
                 </View>
-              </LinearGradient>
+              </View>
               <Pressable style={styles.cameraBtn}>
                 <Camera size={16} color={C.text} />
               </Pressable>
@@ -309,6 +301,5 @@ export default function EditProfilePage() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </VideoBg>
   )
 }

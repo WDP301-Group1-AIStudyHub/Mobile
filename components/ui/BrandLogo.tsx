@@ -111,7 +111,7 @@ export default function BrandLogo({
           style={{
             fontSize: textSize ?? FontSize.base,
             fontWeight: '700',
-            color: C.text,
+            color: C.background === 'transparent' ? '#ffffff' : C.text,
             letterSpacing: -0.2,
           }}
         >

@@ -1,145 +1,80 @@
 import type {
   DocumentItem,
   DocumentsResponse,
+  DocumentFilter,
   UpdateDocumentPayload,
   UploadDocumentPayload,
 } from '../types/document'
 import type { ApiResponse } from '../types/auth'
-import apiClient, { API_BASE_URL } from './apiClient'
-import { getStoredToken } from './authStorage'
+import apiClient from './apiClient'
 
-const USE_MOCK_AUTH = process.env.EXPO_PUBLIC_AUTH_MOCK === '1'
+function normalizeSubjectId(value: unknown): string | undefined {
+  if (!value) return undefined
+  if (typeof value === 'string') return value
+  if (typeof value === 'object' && value !== null) {
+    const obj = value as { _id?: string; id?: string }
+    return obj._id || obj.id
+  }
+  return undefined
+}
 
-// ── Mock data ─────────────────────────────────────────────────────────────────
+function normalizeDoc(doc: DocumentItem): DocumentItem {
+  const raw = doc as DocumentItem & { subjectId?: unknown; extractedText?: string }
+  const sid = normalizeSubjectId(raw.subjectId)
+  // `raw.subject` may be a populated object { _id, name, ... } from MongoDB.
+  // Extract the name string so every consumer receives a safe `subject: string`.
+  const subjectStr: string | undefined = (() => {
+    const s = raw.subject as unknown
+    if (!s) return undefined
+    if (typeof s === 'string') return s
+    if (typeof s === 'object' && s !== null) {
+      const n = (s as Record<string, unknown>).name
+      if (typeof n === 'string' && n.length > 0) return n
+    }
+    return undefined
+  })()
+  return {
+    ...raw,
+    subjectId: sid,
+    subject: subjectStr,
+  }
+}
 
-let mockDocuments: DocumentsResponse = [
-  {
-    id: 'mock-doc-1',
-    title: 'Quantum Entanglement Patterns',
-    description: 'Review sample document',
-    subject: 'Physics',
-    fileUrl: '#',
-    filePublicId: 'mock/quantum-entanglement-patterns',
-    fileName: 'Quantum Entanglement Patterns.pdf',
-    fileType: 'application/pdf',
-    fileSize: 1840000,
-    uploadedBy: 'mock-review-user',
-    createdAt: new Date('2026-05-20T08:00:00.000Z').toISOString(),
-    updatedAt: new Date('2026-05-20T08:00:00.000Z').toISOString(),
-  },
-  {
-    id: 'mock-doc-2',
-    title: 'Neural Network Topologies',
-    description: 'Review sample document',
-    subject: 'AI Research',
-    fileUrl: '#',
-    filePublicId: 'mock/neural-network-topologies',
-    fileName: 'Neural Network Topologies.epub',
-    fileType: 'application/epub+zip',
-    fileSize: 932000,
-    uploadedBy: 'mock-review-user',
-    createdAt: new Date('2026-05-22T10:30:00.000Z').toISOString(),
-    updatedAt: new Date('2026-05-22T10:30:00.000Z').toISOString(),
-  },
-  {
-    id: 'mock-doc-3',
-    title: 'Global Economic Shifts 2025',
-    description: 'Review sample document',
-    subject: 'Economics',
-    fileUrl: '#',
-    filePublicId: 'mock/global-economic-shifts-2025',
-    fileName: 'Global Economic Shifts 2025.docx',
-    fileType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    fileSize: 612000,
-    uploadedBy: 'mock-review-user',
-    createdAt: new Date('2026-05-24T13:45:00.000Z').toISOString(),
-    updatedAt: new Date('2026-05-24T13:45:00.000Z').toISOString(),
-  },
-  {
-    id: 'mock-doc-4',
-    title: 'Calculus III — Multivariable Methods',
-    description: 'Lecture notes HK1',
-    subject: 'Mathematics',
-    fileUrl: '#',
-    filePublicId: 'mock/calculus-iii',
-    fileName: 'Calculus III.pdf',
-    fileType: 'application/pdf',
-    fileSize: 2210000,
-    uploadedBy: 'mock-review-user',
-    createdAt: new Date('2025-10-05T09:00:00.000Z').toISOString(),
-    updatedAt: new Date('2025-10-05T09:00:00.000Z').toISOString(),
-  },
-  {
-    id: 'mock-doc-5',
-    title: 'Data Structures & Algorithms',
-    description: 'HK1 notes',
-    subject: 'AI Research',
-    fileUrl: '#',
-    filePublicId: 'mock/dsa',
-    fileName: 'DSA.pdf',
-    fileType: 'application/pdf',
-    fileSize: 1540000,
-    uploadedBy: 'mock-review-user',
-    createdAt: new Date('2025-11-12T11:00:00.000Z').toISOString(),
-    updatedAt: new Date('2025-11-12T11:00:00.000Z').toISOString(),
-  },
-]
-
-// ── Document API ──────────────────────────────────────────────────────────────
-
-/** Strip heavy fields (extractedText) that cause OOM on Android */
 function trimDoc(doc: DocumentItem): DocumentItem {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { extractedText: _et, ...rest } = doc as DocumentItem & { extractedText?: string }
   return rest
 }
 
-export async function listDocuments(): Promise<DocumentsResponse> {
-  if (USE_MOCK_AUTH) return mockDocuments
+export async function listDocuments(filter?: DocumentFilter): Promise<DocumentsResponse> {
+  const params = new URLSearchParams()
+  if (filter?.search) params.append('search', filter.search)
+  if (filter?.visibility) params.append('visibility', filter.visibility)
+  if (filter?.subject) params.append('subject', filter.subject)
+  if (filter?.status) params.append('status', filter.status)
 
-  const { data } = await apiClient.get<ApiResponse<{ documents: DocumentItem[]; total: number }>>('/api/documents')
-  const docs = data.data?.documents ?? data.data as unknown as DocumentItem[] ?? []
-  return (Array.isArray(docs) ? docs : []).map(trimDoc)
+  const { data } = await apiClient.get<ApiResponse<{ documents: DocumentItem[]; total: number }>>(
+    `/api/documents?${params.toString()}`
+  )
+  const docs = data.data?.documents ?? (data.data as unknown as DocumentItem[]) ?? []
+  return (Array.isArray(docs) ? docs : []).map(trimDoc).map(normalizeDoc)
+}
+
+export async function getDocument(id: string): Promise<DocumentItem> {
+  const { data } = await apiClient.get<ApiResponse<DocumentItem>>(`/api/documents/${id}`)
+  if (!data.data) throw new Error('Document not found')
+  // Keep extractedText for the detail page (no trimDoc)
+  return normalizeDoc(data.data)
 }
 
 export async function searchDocuments(query: string): Promise<DocumentsResponse> {
-  if (USE_MOCK_AUTH) {
-    const normalized = query.trim().toLowerCase()
-    if (!normalized) return mockDocuments
-    return mockDocuments.filter(
-      (doc) =>
-        doc.title.toLowerCase().includes(normalized) ||
-        doc.subject?.toLowerCase().includes(normalized),
-    )
-  }
-
   const { data } = await apiClient.get<ApiResponse<DocumentsResponse>>('/api/documents/search', {
     params: { q: query },
   })
-  return data.data ?? []
+  const docs = data.data ?? []
+  return (Array.isArray(docs) ? docs : []).map(trimDoc).map(normalizeDoc)
 }
 
 export async function uploadDocument(payload: UploadDocumentPayload): Promise<DocumentItem> {
-  if (USE_MOCK_AUTH) {
-    const now = new Date().toISOString()
-    const doc: DocumentItem = {
-      id: `mock-doc-${Date.now()}`,
-      title: payload.title,
-      description: payload.description,
-      subject: payload.subject || 'Uploaded',
-      fileUrl: payload.file.uri,
-      filePublicId: `mock/${payload.file.name}`,
-      fileName: payload.file.name,
-      fileType: payload.file.type,
-      fileSize: payload.file.size ?? 0,
-      uploadedBy: 'mock-review-user',
-      createdAt: now,
-      updatedAt: now,
-    }
-    mockDocuments = [doc, ...mockDocuments]
-    return doc
-  }
-
   const form = new FormData()
   form.append('file', {
     uri: payload.file.uri,
@@ -149,57 +84,87 @@ export async function uploadDocument(payload: UploadDocumentPayload): Promise<Do
   form.append('title', payload.title)
   if (payload.description) form.append('description', payload.description)
   if (payload.subject) form.append('subject', payload.subject)
+  if (payload.subjectId) form.append('subjectId', payload.subjectId)
+  if (payload.visibility) form.append('visibility', payload.visibility)
+  if (payload.metadata) form.append('metadata', JSON.stringify(payload.metadata))
+  if (payload.tags?.length) form.append('tags', JSON.stringify(payload.tags))
+  if (payload.author) form.append('author', payload.author)
+  if (payload.semester) form.append('semester', payload.semester)
+  if (payload.academicYear) form.append('academicYear', payload.academicYear)
 
-  const token = await getStoredToken()
-  const response = await fetch(`${API_BASE_URL}/api/documents/upload`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: form,
-  })
+  try {
+    const { data } = await apiClient.post<ApiResponse<DocumentItem>>('/api/documents/upload', form, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (payload.onProgress && progressEvent.total) {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          payload.onProgress(percentCompleted)
+        }
+      },
+    })
 
-  if (!response.ok) {
+    if (!data.data) throw new Error(data.message || 'Upload failed')
+    return normalizeDoc(trimDoc(data.data))
+  } catch (error: any) {
     let errorMessage = 'Upload failed'
-    try {
-      const errorData = await response.json()
-      errorMessage = errorData.message || errorMessage
-    } catch (e) {
-      // Ignore JSON parse error if response is not JSON
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.message) {
+      errorMessage = error.message
     }
     throw new Error(errorMessage)
   }
-
-  const data = await response.json()
-  if (!data.data) throw new Error('Upload failed')
-  return trimDoc(data.data)
 }
 
 export async function updateDocument(
   id: string,
   payload: UpdateDocumentPayload,
 ): Promise<DocumentItem> {
-  if (USE_MOCK_AUTH) {
-    const current = mockDocuments.find((doc) => doc.id === id)
-    if (!current) throw new Error('Document not found')
-    const updated = { ...current, ...payload, updatedAt: new Date().toISOString() }
-    mockDocuments = mockDocuments.map((doc) => (doc.id === id ? updated : doc))
-    return updated
-  }
-
   const { data } = await apiClient.put<ApiResponse<DocumentItem>>(
     `/api/documents/${id}`,
     payload,
   )
   if (!data.data) throw new Error(data.message || 'Update failed')
-  return data.data
+  return normalizeDoc(data.data)
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  if (USE_MOCK_AUTH) {
-    mockDocuments = mockDocuments.filter((doc) => doc.id !== id)
-    return
-  }
-
   await apiClient.delete(`/api/documents/${id}`)
+}
+
+export async function updateDocumentVersion(
+  documentId: string,
+  payload: {
+    file: { uri: string; name: string; type: string; size?: number }
+    uploadMode: 'OVERRIDE' | 'APPEND'
+    uploadReason?: string
+  }
+): Promise<DocumentItem> {
+  const form = new FormData()
+  form.append('file', {
+    uri: payload.file.uri,
+    name: payload.file.name,
+    type: payload.file.type,
+  } as unknown as Blob)
+  form.append('uploadMode', payload.uploadMode)
+  if (payload.uploadReason) form.append('uploadReason', payload.uploadReason)
+
+  const { data } = await apiClient.post<ApiResponse<DocumentItem>>(
+    `/api/documents/${documentId}/versions`,
+    form,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }
+  )
+  if (!data.data) throw new Error(data.message || 'Version update failed')
+  return normalizeDoc(data.data)
+}
+
+export async function getDocumentVersions(documentId: string): Promise<DocumentItem[]> {
+  const { data } = await apiClient.get<ApiResponse<DocumentItem[]>>(
+    `/api/documents/${documentId}/versions`
+  )
+  return (data.data ?? []).map(normalizeDoc)
 }

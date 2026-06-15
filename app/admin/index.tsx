@@ -8,10 +8,9 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import VideoBg from '../../components/ui/VideoBg'
 import Card from '../../components/ui/Card'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
+import { useEffect, useState, useMemo } from 'react'
 import { useColors } from '../../contexts/ThemeContext'
 
 type Severity = 'info' | 'success' | 'warning' | 'critical'
@@ -215,9 +214,8 @@ export default function AdminDashboard() {
 }), [C])
 
   return (
-    <VideoBg>
-      <View style={styles.safe}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+    <View style={styles.safe}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
           {/* Stats 2×2 */}
           <View style={styles.statsGrid}>
@@ -264,14 +262,9 @@ export default function AdminDashboard() {
           {/* Usecase Coverage */}
           <Card elevated style={styles.usecaseCard} padding="md">
             <View style={styles.usecaseHeader}>
-              <LinearGradient
-                colors={['#7c3aed', '#5b21b6']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.usecaseIconWrap}
-              >
+              <View style={[styles.usecaseIconWrap, { backgroundColor: C ? C.primary : '#3b82f6' }]} >
                 <ShieldCheck size={16} color="#fff" />
-              </LinearGradient>
+              </View>
               <Text style={styles.usecaseTitle}>Usecase Coverage</Text>
             </View>
             {USECASES.map((uc) => (
@@ -292,6 +285,5 @@ export default function AdminDashboard() {
           </View>
         </ScrollView>
       </View>
-    </VideoBg>
   )
 }

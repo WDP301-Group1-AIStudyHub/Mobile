@@ -23,9 +23,6 @@ export function useAuth() {
 
       // Optimistically show stored user while verifying
       const stored = await getStoredUser()
-      if (stored && !cancelled) {
-        setState({ status: 'authenticated', user: stored })
-      }
 
       try {
         // Timeout 10s để tránh treo khi backend cold start (Render free tier)
@@ -36,15 +33,21 @@ export function useAuth() {
           ),
         ])
         if (!cancelled) setState({ status: 'authenticated', user: fresh })
-      } catch {
-        if (!cancelled) {
-          // If stored user exists → keep authenticated (offline / slow network)
-          // Otherwise → clear session and redirect to login
-          if (!stored) {
-            await clearAuthSession()
-            setState({ status: 'unauthenticated' })
-          }
+      } catch (err: any) {
+        if (cancelled) return
+
+        // 401 = token is invalid/expired. Force logout regardless of stored user,
+        // because subsequent API calls would all fail otherwise.
+        const is401 = err?.response?.status === 401 || err?.status === 401
+        if (is401 || !stored) {
+          await clearAuthSession()
+          setState({ status: 'unauthenticated' })
+          return
         }
+
+        // Network/timeout error with a stored user → keep them signed in offline
+        if (cancelled) return
+        setState({ status: 'authenticated', user: stored })
       }
     }
 

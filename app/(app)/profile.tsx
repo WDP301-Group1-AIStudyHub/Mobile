@@ -21,8 +21,6 @@ import {
   Sun,
   User,
 } from 'lucide-react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import VideoBg from '../../components/ui/VideoBg'
 import Card from '../../components/ui/Card'
 import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
@@ -57,7 +55,7 @@ export default function ProfilePage() {
     {
       title: 'Security',
       items: [
-        { icon: Shield, label: 'Privacy & Security', key: 'security' as MenuKey, color: C.accentCoral },
+        { icon: Shield, label: 'Privacy & Security', key: 'security' as MenuKey, color: C.error },
         { icon: Settings, label: 'App Settings', key: 'settings' as MenuKey, color: C.muted },
       ],
     },
@@ -66,13 +64,13 @@ export default function ProfilePage() {
   const styles = useMemo(() => StyleSheet.create({
     safe: { flex: 1 },
     content: { padding: Spacing.lg, paddingBottom: Spacing.xxl, gap: Spacing.lg },
-    pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
+    pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: '#ffffff', letterSpacing: -0.5 },
     profileCard: {
       backgroundColor: C.card, borderWidth: 1, borderColor: C.cardBorder,
       borderRadius: 20, padding: Spacing.lg, flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
     },
     avatarContainer: { flexShrink: 0 },
-    avatarRing: { width: 70, height: 70, borderRadius: 35, alignItems: 'center', justifyContent: 'center', padding: 3 },
+    avatarRing: { width: 70, height: 70, borderRadius: 35, alignItems: 'center', justifyContent: 'center', padding: 3, backgroundColor: C.primary },
     avatarInner: {
       width: 64, height: 64, borderRadius: 32, backgroundColor: C.primaryDim,
       alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.cardElevated,
@@ -93,7 +91,6 @@ export default function ProfilePage() {
     },
     statItem: {
       flex: 1, alignItems: 'center', paddingVertical: Spacing.md, gap: 4,
-      borderRightWidth: 1, borderRightColor: C.cardBorder,
     },
     statValue: { fontSize: FontSize.xl, fontWeight: '700', color: C.text },
     statLabel: { fontSize: FontSize.xs, color: C.muted },
@@ -106,6 +103,9 @@ export default function ProfilePage() {
     menuItem: {
       flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
       paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
+    },
+    menuItemInner: {
+      flexDirection: 'row', alignItems: 'center', gap: Spacing.md, flex: 1,
     },
     menuIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
     menuLabel: { flex: 1, fontSize: FontSize.sm, fontWeight: '500', color: C.text },
@@ -127,8 +127,9 @@ export default function ProfilePage() {
       router.push('/(app)/change-password')
     } else if (key === 'theme') {
       toggle()
+    } else if (key === 'subjects') {
+      router.push('/(app)/subjects')
     }
-    // other keys are placeholders for future screens
   }
 
   const handleSignOut = () => {
@@ -151,9 +152,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <VideoBg>
-      <SafeAreaView style={styles.safe}>
-        <ScrollView
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
@@ -166,16 +166,11 @@ export default function ProfilePage() {
           {/* Avatar & Info */}
           <View style={styles.profileCard}>
             <View style={styles.avatarContainer}>
-              <LinearGradient
-                colors={C.gradientPrimary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.avatarRing}
-              >
+              <View style={styles.avatarRing}>
                 <View style={styles.avatarInner}>
                   <User size={36} color={C.primary} />
                 </View>
-              </LinearGradient>
+              </View>
             </View>
 
             <View style={styles.profileInfo}>
@@ -204,8 +199,14 @@ export default function ProfilePage() {
               { label: 'Documents', value: '342' },
               { label: 'Chats', value: '18' },
               { label: 'Subjects', value: '12' },
-            ].map((s) => (
-              <View key={s.label} style={styles.statItem}>
+            ].map((s, idx) => (
+              <View
+                key={s.label}
+                style={[
+                  styles.statItem,
+                  idx < 2 && { borderRightWidth: 1, borderRightColor: C.cardBorder },
+                ]}
+              >
                 <Text style={styles.statValue}>{s.value}</Text>
                 <Text style={styles.statLabel}>{s.label}</Text>
               </View>
@@ -221,13 +222,13 @@ export default function ProfilePage() {
                   <View key={item.key}>
                     <Pressable style={styles.menuItem} onPress={() => handleMenuPress(item.key)}>
                       {({ pressed }) => (
-                        <>
-                          <View style={[styles.menuIconWrap, { backgroundColor: `${item.color}14` }, pressed && { opacity: 0.7 }]}>
+                        <View style={[styles.menuItemInner, pressed && { opacity: 0.7 }]}>
+                          <View style={[styles.menuIconWrap, { backgroundColor: `${item.color}14` }]}>
                             <item.icon size={18} color={item.color} />
                           </View>
                           <Text style={styles.menuLabel}>{item.label}</Text>
                           <ChevronRight size={16} color={C.muted} />
-                        </>
+                        </View>
                       )}
                     </Pressable>
                     {i < section.items.length - 1 && (
@@ -254,7 +255,5 @@ export default function ProfilePage() {
           <Text style={styles.version}>AI Study Hub v1.0.0</Text>
         </ScrollView>
       </SafeAreaView>
-    </VideoBg>
   )
 }
-

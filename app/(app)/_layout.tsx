@@ -1,10 +1,10 @@
-import { useMemo } from 'react'
-import { Tabs } from 'expo-router'
-import { LayoutDashboard, BookOpen, MessageCircle, User, BarChart2 } from 'lucide-react-native'
-import { View, StyleSheet, Platform } from 'react-native'
+import { useEffect, useMemo } from 'react'
+import { Tabs, router } from 'expo-router'
+import { LayoutDashboard, MessageCircle, User, BarChart2, FileText, FolderOpen } from 'lucide-react-native'
+import { View, StyleSheet, Platform, ActivityIndicator } from 'react-native'
 
-import { useColors, useTheme } from '../../contexts/ThemeContext'
-import { LinearGradient } from 'expo-linear-gradient'
+import { useColors } from '../../contexts/ThemeContext'
+import { useAuth } from '../../hooks/useAuth'
 
 const tabIconStyles = StyleSheet.create({
   iconWrap: {
@@ -26,17 +26,12 @@ function TabIcon({ icon: Icon, focused }: { icon: typeof LayoutDashboard; focuse
   return (
     <View style={[tabIconStyles.iconWrap, focused && tabIconStyles.iconWrapActive]}>
       {focused && (
-        <LinearGradient
-          colors={C.gradientPrimary}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[StyleSheet.absoluteFill, { borderRadius: 12 }]}
-        />
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: C.primary, borderRadius: 12 }]} />
       )}
       <Icon
         size={21}
-        color={focused ? '#fff' : C.muted}
-        strokeWidth={focused ? 2.2 : 1.8}
+        color={focused ? '#fff' : (C.background === 'transparent' ? '#000000' : C.muted)}
+        strokeWidth={focused ? 2.2 : 2.5}
       />
     </View>
   )
@@ -44,47 +39,87 @@ function TabIcon({ icon: Icon, focused }: { icon: typeof LayoutDashboard; focuse
 
 export default function AppLayout() {
   const C = useColors()
-  const { isDark } = useTheme()
+  const { state, signOut } = useAuth()
+
+  // Safety net: if we are still in 'loading' state after 5s, the auth check
+  // is hung (e.g. backend unreachable). Force-clear the session and redirect
+  // to login so the user is not stuck on a spinner.
+  useEffect(() => {
+    if (state.status !== 'loading') return
+    const t = setTimeout(() => {
+      console.warn('[app/_layout] auth loading timeout, forcing unauth')
+      signOut()
+    }, 5000)
+    return () => clearTimeout(t)
+  }, [state.status, signOut])
+
+  // Auth guard: redirect to login if not authenticated
+  useEffect(() => {
+    if (state.status === 'unauthenticated') {
+      router.replace('/(auth)/login')
+    }
+  }, [state.status])
 
   const styles = useMemo(() => StyleSheet.create({
-  tabBar: {
-    backgroundColor: isDark ? 'rgba(10,14,26,0.82)' : 'rgba(255,255,252,0.90)',
-    borderTopWidth: 1,
-    borderTopColor: C.cardBorder,
-    height: Platform.OS === 'ios' ? 84 : 72,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-    paddingTop: 8,
-    shadowColor: C.cardShadowColor,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 16,
-  },
-  tabLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-    marginTop: 2,
-  },
-}), [C, isDark])
+    tabBar: {
+      backgroundColor: C.card,
+      borderTopWidth: 1,
+      borderTopColor: C.cardBorder,
+      height: Platform.OS === 'ios' ? 84 : 72,
+      paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+      paddingTop: 8,
+      shadowColor: C.cardShadowColor,
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 20,
+      elevation: 16,
+    },
+    tabLabel: {
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.2,
+      marginTop: 2,
+    },
+  }), [C])
+
+  // Don't render tabs until auth state is resolved
+  if (state.status !== 'authenticated') {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' }}>
+        <ActivityIndicator size="large" color={C.primary} />
+      </View>
+    )
+  }
 
   return (
     <Tabs
       screenOptions={{
+        sceneStyle: { backgroundColor: 'transparent' },
         headerShown: false,
         tabBarStyle: styles.tabBar,
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.tabLabel,
         tabBarActiveTintColor: C.primary,
-        tabBarInactiveTintColor: C.muted,
+        tabBarInactiveTintColor: C.background === 'transparent' ? '#000000' : C.muted,
       }}
     >
+      {/* Documents - shows subjects and their documents */}
       <Tabs.Screen
-        name="library"
+        name="documents"
         options={{
-          title: 'Library',
+          title: 'Documents',
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon={BookOpen} focused={focused} />
+            <TabIcon icon={FileText} focused={focused} />
+          ),
+        }}
+      />
+      {/* Subjects - manage subjects */}
+      <Tabs.Screen
+        name="subjects"
+        options={{
+          title: 'Subjects',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon={FolderOpen} focused={focused} />
           ),
         }}
       />
@@ -131,6 +166,10 @@ export default function AppLayout() {
       />
       <Tabs.Screen
         name="change-password"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="document/[id]"
         options={{ href: null }}
       />
     </Tabs>
