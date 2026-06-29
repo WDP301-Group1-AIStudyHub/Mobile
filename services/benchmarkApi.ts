@@ -29,7 +29,7 @@ export interface BenchmarkSummary {
 }
 
 export async function listBenchmarkQuestions(): Promise<BenchmarkQuestion[]> {
-  const { data } = await apiClient.get<ApiResponse<BenchmarkQuestion[]>>('/api/benchmarks/questions')
+  const { data } = await apiClient.get<ApiResponse<BenchmarkQuestion[]>>('/api/benchmark/questions')
   return Array.isArray(data.data) ? data.data : []
 }
 
@@ -40,7 +40,7 @@ export async function createBenchmarkQuestion(payload: {
   difficulty: BenchmarkDifficulty
 }): Promise<BenchmarkQuestion> {
   const { data } = await apiClient.post<ApiResponse<BenchmarkQuestion>>(
-    '/api/benchmarks/questions',
+    '/api/benchmark/questions',
     payload
   )
   if (!data.data) throw new Error(data.message || 'Create failed')
@@ -48,19 +48,19 @@ export async function createBenchmarkQuestion(payload: {
 }
 
 export async function deleteBenchmarkQuestion(id: string): Promise<void> {
-  await apiClient.delete(`/api/benchmarks/questions/${id}`)
+  await apiClient.delete(`/api/benchmark/questions/${id}`)
 }
 
 export async function runBenchmarkQuestion(id: string): Promise<BenchmarkQuestion> {
   const { data } = await apiClient.post<ApiResponse<BenchmarkQuestion>>(
-    `/api/benchmarks/run/${id}`
+    `/api/benchmark/run/${id}`
   )
   if (!data.data) throw new Error(data.message || 'Run failed')
   return data.data
 }
 
 export async function getBenchmarkSummary(): Promise<BenchmarkSummary> {
-  const { data } = await apiClient.get<ApiResponse<BenchmarkSummary>>('/api/benchmarks/summary')
+  const { data } = await apiClient.get<ApiResponse<BenchmarkSummary>>('/api/benchmark/summary')
   if (!data.data) {
     return {
       totalRuns: 0,
