@@ -280,7 +280,7 @@ export default function ChatIndexPage() {
         },
         headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
         aiDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.success },
-        headerTitle: { fontSize: FontSize.base, fontWeight: '700', color: '#ffffff' },
+        headerTitle: { fontSize: FontSize.base, fontWeight: '700', color: C.text },
 
         msgList: { padding: Spacing.md, gap: Spacing.md, paddingBottom: Spacing.xl },
         msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm },
@@ -324,7 +324,7 @@ export default function ChatIndexPage() {
           elevation: 24,
         },
         drawerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingBottom: Spacing.md, borderBottomWidth: 1, borderBottomColor: C.cardBorder },
-        drawerTitle: { fontSize: FontSize.lg, fontWeight: '800', color: '#ffffff' },
+        drawerTitle: { fontSize: FontSize.lg, fontWeight: '800', color: C.text },
         drawerCloseBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: C.primaryDim, alignItems: 'center', justifyContent: 'center' },
         newChatBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginHorizontal: Spacing.md, marginTop: Spacing.md, marginBottom: Spacing.sm, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, borderRadius: 12, backgroundColor: C.primary },
         newChatText: { fontSize: FontSize.sm, fontWeight: '700', color: '#fff' },

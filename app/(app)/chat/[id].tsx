@@ -209,7 +209,7 @@ export default function ChatConversationPage() {
   headerTitle: {
     fontSize: FontSize.base,
     fontWeight: '600',
-    color: '#ffffff',
+    color: C.text,
   },
   msgList: {
     padding: Spacing.lg,

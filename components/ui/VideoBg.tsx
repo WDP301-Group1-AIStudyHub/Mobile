@@ -4,6 +4,7 @@
  */
 import React from 'react'
 import { Image, StyleSheet, View } from 'react-native'
+import { useColors } from '../../contexts/ThemeContext'
 
 interface VideoBgProps {
   children?: React.ReactNode
@@ -11,18 +12,10 @@ interface VideoBgProps {
 }
 
 export default function VideoBg({ children, veil = 'default' }: VideoBgProps) {
-  const scrimOpacity = veil === 'strong' ? 0.35 : 0.2
+  const colors = useColors()
 
   return (
-    <View style={styles.root}>
-      {/* Background image */}
-      <Image
-        source={require('../../assets/bg.png')}
-        style={styles.bg}
-        resizeMode="cover"
-      />
-
-
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
 
       {/* App content */}
       {children}

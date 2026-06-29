@@ -153,7 +153,7 @@ export default function DashboardPage() {
       alignItems: 'center', justifyContent: 'center',
     },
     pageHeader: { gap: 4 },
-    pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: '#ffffff', letterSpacing: -0.5 },
+    pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
     pageSubtitle: { fontSize: FontSize.sm, color: C.muted, lineHeight: 20 },
     storageCard: {
       backgroundColor: C.card, borderRadius: Radius.lg, borderWidth: 1,

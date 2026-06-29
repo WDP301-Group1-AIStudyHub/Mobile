@@ -1,57 +1,57 @@
 // Clean color palette - no gradients, solid colors only
 export const LightColors = {
   // Backgrounds
-  background: 'transparent',
-  backgroundTop: 'transparent',
-  backgroundMid: 'transparent',
-  backgroundBottom: 'transparent',
-  card: '#ffffff',
-  cardBorder: '#e2e6ef',
-  cardElevated: '#f0f2f7',
-  cardShadowColor: '#1a1a2e',
+  background: '#f7f8f1', // moon-paper
+  backgroundTop: '#f7f8f1',
+  backgroundMid: '#f7f8f1',
+  backgroundBottom: '#f7f8f1',
+  card: '#fffdf7', // paper
+  cardBorder: '#d5dfd0', // border
+  cardElevated: '#ffffff',
+  cardShadowColor: 'rgba(73, 107, 85, 0.1)', // shadow-soft
 
   // Brand colors
-  primary: '#4a6cf7',
-  primaryLight: '#6b8aff',
-  primaryDim: 'rgba(74, 108, 247, 0.1)',
-  secondary: '#3b82f6',
-  secondaryDim: 'rgba(59, 130, 246, 0.1)',
-  accent: '#8b5cf6',
-  accentDim: 'rgba(139, 92, 246, 0.1)',
-  accentTeal: '#14b8a6',
-  accentTealDim: 'rgba(20, 184, 166, 0.1)',
-  accentGold: '#f59e0b',
-  accentGoldDim: 'rgba(245, 158, 11, 0.1)',
-  accentCoral: '#ef4444',
+  primary: '#496b55', // moss
+  primaryLight: '#638f74', // accent-teal
+  primaryDim: 'rgba(73, 107, 85, 0.1)',
+  secondary: '#eef6f1', // lichen/dew
+  secondaryDim: 'rgba(238, 246, 241, 0.5)',
+  accent: '#dce7d4', // sage
+  accentDim: 'rgba(220, 231, 212, 0.2)',
+  accentTeal: '#6f9b9b', // accent-cyan
+  accentTealDim: 'rgba(111, 155, 155, 0.1)',
+  accentGold: '#9a7a3d', // accent-gold
+  accentGoldDim: 'rgba(154, 122, 61, 0.1)',
+  accentCoral: '#b8876c', // clay
 
   // Text
-  text: '#1e293b',
-  textSecondary: '#475569',
-  muted: '#94a3b8',
-  mutedLight: '#cbd5e1',
+  text: '#263126', // bark
+  textSecondary: '#617064', // muted-foreground
+  muted: '#88968b', // readable muted text
+  mutedLight: '#a6b4a9', // readable lighter muted text
 
   // Semantic
-  success: '#22c55e',
-  successDim: 'rgba(34, 197, 94, 0.1)',
-  error: '#ef4444',
-  errorDim: 'rgba(239, 68, 68, 0.1)',
-  warning: '#f59e0b',
-  warningDim: 'rgba(245, 158, 11, 0.1)',
-  info: '#3b82f6',
-  infoDim: 'rgba(59, 130, 246, 0.1)',
+  success: '#527267', // accent-sapphire
+  successDim: 'rgba(82, 114, 103, 0.1)',
+  error: '#9f5d55', // berry
+  errorDim: 'rgba(159, 93, 85, 0.1)',
+  warning: '#9a7a3d',
+  warningDim: 'rgba(154, 122, 61, 0.1)',
+  info: '#6f9b9b',
+  infoDim: 'rgba(111, 155, 155, 0.1)',
 
   // Overlay
-  overlay: 'rgba(255, 255, 255, 0.15)',
-  overlayDark: 'rgba(15, 23, 42, 0.08)',
+  overlay: 'rgba(247, 248, 241, 0.6)',
+  overlayDark: 'rgba(38, 49, 38, 0.2)', // bark 20%
 }
 
 // Dark mode palette
 export const DarkColors = {
   // Backgrounds
-  background: 'transparent',
-  backgroundTop: 'transparent',
-  backgroundMid: 'transparent',
-  backgroundBottom: 'transparent',
+  background: '#0f172a',
+  backgroundTop: '#0f172a',
+  backgroundMid: '#0f172a',
+  backgroundBottom: '#0f172a',
   card: '#1e293b',
   cardBorder: '#334155',
   cardElevated: '#253347',

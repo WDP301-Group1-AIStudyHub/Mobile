@@ -33,8 +33,12 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login({ email: form.email, password: form.password })
-      router.replace('/(app)/dashboard')
+      const user = await login({ email: form.email, password: form.password })
+      if (user.role === 'admin') {
+        router.replace('/admin')
+      } else {
+        router.replace('/(app)/dashboard')
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to sign in.')
     } finally {

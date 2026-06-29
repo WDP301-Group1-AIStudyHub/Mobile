@@ -20,7 +20,11 @@ export default function Index() {
 
   useEffect(() => {
     if (state.status === 'authenticated') {
-      router.replace('/(app)/dashboard')
+      if (state.user.role === 'admin') {
+        router.replace('/admin')
+      } else {
+        router.replace('/(app)/dashboard')
+      }
     } else if (state.status === 'unauthenticated') {
       router.replace('/(auth)/login')
     }

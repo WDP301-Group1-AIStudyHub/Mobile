@@ -174,7 +174,7 @@ export default function SubjectsPage() {
                 <FolderOpen size={20} color={C.primary} strokeWidth={2} />
               </View>
               <View>
-                <Text style={[styles.title, { color: '#ffffff' }]}>Subjects</Text>
+                <Text style={[styles.title, { color: C.text }]}>Subjects</Text>
                 <Text style={[styles.subtitle, { color: C.muted }]}>
                   {loading ? 'Loading...' : `${subjects.length} subjects`}
                 </Text>

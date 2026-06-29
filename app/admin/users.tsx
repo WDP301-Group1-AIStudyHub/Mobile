@@ -1,48 +1,172 @@
-import { useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useState, useMemo, useCallback } from 'react'
+import { ScrollView, StyleSheet, Text, View, Pressable, Alert, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Users, ShieldAlert } from 'lucide-react-native'
+import { Users, Ban, CheckCircle, ShieldAlert, MoreVertical, Search } from 'lucide-react-native'
 import Card from '../../components/ui/Card'
+import Input from '../../components/ui/Input'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
+import { listAdminUsers, banUser, unbanUser } from '../../services/adminApi'
+import type { AdminUser } from '../../types/admin'
 
 export default function UsersPage() {
   const C = useColors()
-  const [acknowledged, setAcknowledged] = useState(false)
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
-  const styles = StyleSheet.create({
+  const filteredUsers = useMemo(() => {
+    const q = search.toLowerCase()
+    if (!q) return users
+    return users.filter(
+      (u) =>
+        (u.fullName || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q)
+    )
+  }, [users, search])
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      const data = await listAdminUsers()
+      setUsers(data)
+    } catch (error) {
+      console.error('Failed to fetch users', error)
+      Alert.alert('Error', 'Failed to load users')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchUsers()
+  }, [fetchUsers])
+
+  const handleBan = (user: AdminUser) => {
+    Alert.prompt(
+      'Ban User',
+      `Enter reason for banning ${user.email}:`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Ban', 
+          style: 'destructive',
+          onPress: async (reason?: string) => {
+            if (!reason) {
+              Alert.alert('Error', 'Reason is required')
+              return
+            }
+            try {
+              setActionLoadingId(user.id)
+              await banUser(user.id, reason)
+              await fetchUsers()
+            } catch (error) {
+              Alert.alert('Error', 'Failed to ban user')
+            } finally {
+              setActionLoadingId(null)
+            }
+          }
+        }
+      ]
+    )
+  }
+
+  const handleUnban = (user: AdminUser) => {
+    Alert.alert(
+      'Unban User',
+      `Are you sure you want to unban ${user.email}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unban',
+          style: 'default',
+          onPress: async () => {
+            try {
+              setActionLoadingId(user.id)
+              await unbanUser(user.id)
+              await fetchUsers()
+            } catch (error) {
+              Alert.alert('Error', 'Failed to unban user')
+            } finally {
+              setActionLoadingId(null)
+            }
+          }
+        }
+      ]
+    )
+  }
+
+  const styles = useMemo(() => StyleSheet.create({
     safe: { flex: 1 },
     content: {
       padding: Spacing.lg,
-      paddingBottom: Spacing.xxl,
+      paddingBottom: Spacing.xxl + 40,
       gap: Spacing.md,
     },
     pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
     pageSubtitle: { fontSize: FontSize.sm, color: C.muted, lineHeight: 20 },
-    warningCard: {
-      padding: Spacing.lg,
+    searchWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: Spacing.sm,
-      borderLeftWidth: 3,
-      borderLeftColor: C.warning,
+      marginBottom: Spacing.sm,
     },
-    warningHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-    warningTitle: { fontSize: FontSize.base, fontWeight: '700', color: C.text },
-    warningBody: { fontSize: FontSize.sm, color: C.muted, lineHeight: 22 },
-    infoCard: {
-      padding: Spacing.lg,
+    userCard: {
+      padding: Spacing.md,
       gap: Spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: Spacing.sm,
     },
-    infoTitle: { fontSize: FontSize.base, fontWeight: '700', color: C.text },
-    bulletList: { gap: 4 },
-    bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-    bulletDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: C.primary,
-      marginTop: 7,
+    avatar: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: C.primaryDim,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    bulletText: { flex: 1, fontSize: FontSize.sm, color: C.muted, lineHeight: 20 },
+    avatarText: {
+      fontSize: FontSize.lg,
+      fontWeight: '700',
+      color: C.primary,
+    },
+    userInfo: {
+      flex: 1,
+      gap: 2,
+    },
+    userName: {
+      fontSize: FontSize.base,
+      fontWeight: '700',
+      color: C.text,
+    },
+    userEmail: {
+      fontSize: FontSize.sm,
+      color: C.muted,
+    },
+    badgeRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginTop: 4,
+    },
+    badge: {
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: Radius.full,
+    },
+    badgeText: {
+      fontSize: 10,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+    },
+    actionBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: Radius.md,
+      backgroundColor: C.cardElevated,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     empty: {
       alignItems: 'center',
       paddingTop: Spacing.xxl,
@@ -61,74 +185,84 @@ export default function UsersPage() {
       fontWeight: '700',
       color: C.text,
     },
-    emptyDesc: {
-      fontSize: FontSize.sm,
-      color: C.muted,
-      textAlign: 'center',
-      maxWidth: 280,
-      lineHeight: 20,
-    },
-  })
+  }), [C])
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={C.primary} />
+      </View>
+    )
+  }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={{ gap: 4 }}>
-            <Text style={styles.pageTitle}>User Management</Text>
-            <Text style={styles.pageSubtitle}>
-              Manage user accounts, roles, and access permissions.
-            </Text>
+        <View style={{ gap: 4, marginBottom: Spacing.sm }}>
+          <Text style={styles.pageTitle}>User Management</Text>
+          <Text style={styles.pageSubtitle}>
+            Manage user accounts, roles, and access permissions.
+          </Text>
+        </View>
+
+        <View style={styles.searchWrap}>
+          <View style={{ flex: 1 }}>
+            <Input
+              placeholder="Search by name or email..."
+              value={search}
+              onChangeText={setSearch}
+              leftIcon={<Search size={18} color={C.muted} />}
+            />
           </View>
+        </View>
 
-          <Card elevated style={styles.warningCard}>
-            <View style={styles.warningHeader}>
-              <ShieldAlert size={18} color={C.warning} />
-              <Text style={styles.warningTitle}>Admin API not available</Text>
+        {filteredUsers.length === 0 ? (
+          <View style={styles.empty}>
+            <View style={styles.emptyIcon}>
+              <Users size={36} color={C.muted} strokeWidth={1.5} />
             </View>
-            <Text style={styles.warningBody}>
-              The current backend does not expose endpoints for listing or modifying user
-              accounts. This page is read-only until the admin user-management API is added.
-            </Text>
-          </Card>
-
-          <Card elevated style={styles.infoCard}>
-            <View style={styles.warningHeader}>
-              <Users size={18} color={C.primary} />
-              <Text style={styles.infoTitle}>What will be available</Text>
-            </View>
-            <View style={styles.bulletList}>
-              <View style={styles.bulletRow}>
-                <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>List all registered users with role, status, and last-login info</Text>
-              </View>
-              <View style={styles.bulletRow}>
-                <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>Edit user full name, email, and role</Text>
-              </View>
-              <View style={styles.bulletRow}>
-                <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>Activate / deactivate user accounts</Text>
-              </View>
-              <View style={styles.bulletRow}>
-                <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>Search and filter by role and status</Text>
-              </View>
-            </View>
-          </Card>
-
-          {!acknowledged && (
-            <View style={styles.empty}>
-              <View style={styles.emptyIcon}>
-                <Users size={36} color={C.muted} strokeWidth={1.5} />
-              </View>
-              <Text style={styles.emptyTitle}>No users to display</Text>
-              <Text style={styles.emptyDesc}>
-                Once the backend exposes the admin user-management endpoints, registered users
-                will appear here automatically.
+            <Text style={styles.emptyTitle}>No users found</Text>
+            {search ? (
+              <Text style={{ fontSize: FontSize.sm, color: C.muted, textAlign: 'center' }}>
+                Try a different search term.
               </Text>
-            </View>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+            ) : null}
+          </View>
+        ) : (
+          filteredUsers.map(user => (
+            <Card elevated key={user.id} style={styles.userCard}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{user.fullName ? user.fullName[0].toUpperCase() : 'U'}</Text>
+              </View>
+              <View style={styles.userInfo}>
+                <Text style={styles.userName}>{user.fullName || 'No Name'}</Text>
+                <Text style={styles.userEmail}>{user.email}</Text>
+                <View style={styles.badgeRow}>
+                  <View style={[styles.badge, { backgroundColor: user.role === 'admin' ? C.accentGoldDim : C.primaryDim }]}>
+                    <Text style={[styles.badgeText, { color: user.role === 'admin' ? C.accentGold : C.primary }]}>{user.role}</Text>
+                  </View>
+                  <View style={[styles.badge, { backgroundColor: user.isActive ? C.successDim : C.errorDim }]}>
+                    <Text style={[styles.badgeText, { color: user.isActive ? C.success : C.error }]}>{user.isActive ? 'ACTIVE' : 'BANNED'}</Text>
+                  </View>
+                </View>
+              </View>
+              <Pressable
+                style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => user.isActive ? handleBan(user) : handleUnban(user)}
+                disabled={actionLoadingId === user.id}
+              >
+                {actionLoadingId === user.id ? (
+                  <ActivityIndicator size="small" color={C.textSecondary} />
+                ) : user.isActive ? (
+                  <Ban size={20} color={C.error} />
+                ) : (
+                  <CheckCircle size={20} color={C.success} />
+                )}
+              </Pressable>
+            </Card>
+          ))
+        )}
+      </ScrollView>
+    </SafeAreaView>
   )
 }
