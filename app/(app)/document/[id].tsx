@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Linking
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -28,6 +29,7 @@ import {
   ChevronDown,
   ChevronRight,
   AlignLeft,
+  ExternalLink
 } from 'lucide-react-native'
 import Card from '../../../components/ui/Card'
 import ThemeToggle from '../../../components/ui/ThemeToggle'
@@ -225,80 +227,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
-  // Content viewer
-  contentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  contentMeta: {
-    fontSize: FontSize.xs,
-    fontWeight: '600',
-  },
-  contentBox: {
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-  },
-  contentText: {
-    fontSize: FontSize.sm,
-    lineHeight: 22,
-    fontFamily: 'monospace',
-  },
-  contentEmpty: {
-    fontSize: FontSize.sm,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    paddingVertical: Spacing.lg,
-  },
 })
-
-// ─── Content Viewer ────────────────────────────────────────────────────────────
-function ContentViewer({ content }: { content: string | undefined }) {
-  const C = useColors()
-  const [expanded, setExpanded] = useState(false)
-
-  if (!content) {
-    return (
-      <Text style={[styles.contentEmpty, { color: C.muted }]}>
-        No extracted content available for this document.
-      </Text>
-    )
-  }
-
-  const PREVIEW = 1500
-  const isLong = content.length > PREVIEW
-  const display = expanded || !isLong ? content : content.slice(0, PREVIEW) + '...'
-
-  return (
-    <View>
-      <View
-        style={[
-          styles.contentBox,
-          { backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder },
-        ]}
-      >
-        <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
-          <Text style={[styles.contentText, { color: C.text }]}>{display}</Text>
-        </ScrollView>
-      </View>
-      {isLong && (
-        <Pressable
-          onPress={() => setExpanded(!expanded)}
-          style={{ alignSelf: 'center', marginTop: Spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 4 }}
-        >
-          <Text style={[styles.contentMeta, { color: C.primary }]}>
-            {expanded ? 'Show less' : `Show full content (${content.length.toLocaleString()} chars)`}
-          </Text>
-          {expanded ? (
-            <ChevronDown size={14} color={C.primary} />
-          ) : (
-            <ChevronRight size={14} color={C.primary} />
-          )}
-        </Pressable>
-      )}
-    </View>
-  )
-}
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function DocumentDetailsPage() {
@@ -489,21 +418,7 @@ export default function DocumentDetailsPage() {
             </View>
           </Card>
 
-          {/* Document Content (read-only, extracted text) */}
-          {contentLength > 0 && (
-            <Card elevated style={styles.card}>
-              <View style={styles.sectionHeader}>
-                <AlignLeft size={18} color={C.primary} />
-                <Text style={[styles.sectionTitle, { color: C.text }]}>Document Content</Text>
-                <View style={[styles.metaBadge, { backgroundColor: C.primaryDim, marginLeft: 'auto' }]}>
-                  <Text style={[styles.contentMeta, { color: C.primary }]}>
-                    {contentLength.toLocaleString()} chars
-                  </Text>
-                </View>
-              </View>
-              <ContentViewer content={doc.extractedText} />
-            </Card>
-          )}
+
 
           {/* Indexing Statistics */}
           <Card elevated style={styles.card}>
@@ -582,6 +497,15 @@ export default function DocumentDetailsPage() {
 
           {/* Action Button */}
           <View style={styles.actionRow}>
+            {!!doc.fileUrl && (
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder }]}
+                onPress={() => Linking.openURL(doc.fileUrl)}
+              >
+                <ExternalLink size={16} color={C.text} />
+                <Text style={[styles.actionBtnText, { color: C.text }]}>Open File</Text>
+              </Pressable>
+            )}
             <Pressable
               style={[styles.actionBtn, { backgroundColor: C.primary }]}
               onPress={() => router.push('/(app)/chat')}

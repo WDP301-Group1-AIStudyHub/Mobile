@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { Tabs, router } from 'expo-router'
-import { Activity, FileText, LayoutGrid, ShieldCheck, Users, X } from 'lucide-react-native'
+import { Activity, FileText, LayoutGrid, ShieldCheck, Users, X, User } from 'lucide-react-native'
 import { View, Text, Pressable, StyleSheet, Platform, ActivityIndicator } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
@@ -29,7 +29,7 @@ function TabIcon({
   const C = useColors()
   return (
     <View style={[adminTabStyles.tabIconWrap, focused && { backgroundColor: `${color}18` }]}>
-      <Icon size={20} color={focused ? color : (C.background === 'transparent' ? '#000000' : C.muted)} strokeWidth={focused ? 2.2 : 2.5} />
+      <Icon size={20} color={focused ? color : C.textSecondary} strokeWidth={focused ? 2.2 : 2.5} />
     </View>
   )
 }
@@ -95,13 +95,6 @@ function AdminHeader() {
           <Text style={hStyles.adminTitle}>AIStudyHub</Text>
         </View>
       </View>
-      <Pressable
-        onPress={() => router.back()}
-        style={({ pressed }) => [hStyles.exitBtn, pressed && { opacity: 0.7 }]}
-        hitSlop={8}
-      >
-        <X size={18} color={C.muted} />
-      </Pressable>
     </View>
   )
 }
@@ -162,7 +155,7 @@ export default function AdminLayout() {
         tabBarStyle: styles.tabBar,
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.tabLabel,
-        tabBarInactiveTintColor: C.background === 'transparent' ? '#000000' : C.muted,
+        tabBarInactiveTintColor: C.textSecondary,
       }}
     >
       <Tabs.Screen
@@ -204,6 +197,24 @@ export default function AdminLayout() {
             <TabIcon icon={Activity} focused={focused} color={C.accentTeal} />
           ),
         }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarActiveTintColor: C.primary,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon={User as any} focused={focused} color={C.primary} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="edit-profile"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="change-password"
+        options={{ href: null }}
       />
     </Tabs>
   )

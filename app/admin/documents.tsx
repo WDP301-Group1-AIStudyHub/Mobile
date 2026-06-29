@@ -9,33 +9,23 @@ import {
   Text,
   TextInput,
   View,
+  ActivityIndicator,
+  Linking
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
-  FileCog,
+  FileText,
   Search,
   X,
+  Eye,
+  ExternalLink
 } from 'lucide-react-native'
 import Card from '../../components/ui/Card'
 import Input from '../../components/ui/Input'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
-import { listDocuments, updateDocument } from '../../services/documentApi'
-import type { DocumentItem } from '../../types/document'
-
-type IndexedStatus = 'indexed' | 'pending' | 'failed'
-type AdminDoc = DocumentItem & {
-  ownerName: string
-  ownerEmail: string
-  updated: string
-  indexed: IndexedStatus
-}
-
-const INDEXED_LABEL: Record<IndexedStatus, string> = {
-  indexed: 'Indexed',
-  pending: 'Pending',
-  failed: 'Failed',
-}
+import { listAdminDocuments } from '../../services/adminApi'
+import type { AdminDocument } from '../../types/admin'
 
 function timeAgo(isoDate: string | undefined): string {
   if (!isoDate) return 'recently'
@@ -52,63 +42,20 @@ function timeAgo(isoDate: string | undefined): string {
   return `${Math.floor(months / 12)}y ago`
 }
 
-function deriveIndexed(doc: DocumentItem): IndexedStatus {
-  if (doc.extractionStatus === 'FAILED') return 'failed'
-  if (doc.extractionStatus === 'COMPLETED' || (doc.totalChunks && doc.totalChunks > 0)) return 'indexed'
-  return 'pending'
-}
-
-function ownerName(doc: DocumentItem): string {
-  // The backend returns `uploadedBy` as an owner id (ObjectId string)
-  // or as a populated user object — handle both.
-  const u = doc.uploadedBy as unknown
-  if (!u) return doc.metadata?.author?.trim() || 'Unknown owner'
-  if (typeof u === 'string') return u
-  if (typeof u === 'object' && u !== null) {
-    const obj = u as Record<string, unknown>
-    const n = obj.name ?? obj.fullName ?? obj.email
-    if (typeof n === 'string' && n.length > 0) return n
-  }
-  return doc.metadata?.author?.trim() || 'Unknown owner'
-}
-
-// Backend may populate `subject` as an object. Defensive helper.
-function subjectLabel(subject: unknown): string {
-  if (subject == null) return ''
-  if (typeof subject === 'string') return subject
-  if (typeof subject === 'object') {
-    const n = (subject as Record<string, unknown>).name
-    if (typeof n === 'string') return n
-  }
-  return ''
-}
-
 export default function DocumentsPage() {
   const C = useColors()
-  const [docs, setDocs] = useState<AdminDoc[]>([])
+  const [docs, setDocs] = useState<AdminDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState('')
-  const [saving, setSaving] = useState(false)
 
-  const [editVisible, setEditVisible] = useState(false)
-  const [editDoc, setEditDoc] = useState<AdminDoc | null>(null)
-  const [editTitle, setEditTitle] = useState('')
-  const [editSubject, setEditSubject] = useState('')
-  const [editDesc, setEditDesc] = useState('')
+  const [viewVisible, setViewVisible] = useState(false)
+  const [viewDoc, setViewDoc] = useState<AdminDocument | null>(null)
 
   const loadDocs = useCallback(async () => {
     try {
-      const data = await listDocuments()
-      const list = Array.isArray(data) ? data : []
-      const mapped: AdminDoc[] = list.map((d) => ({
-        ...d,
-        ownerName: ownerName(d),
-        ownerEmail: '',
-        updated: timeAgo(d.updatedAt),
-        indexed: deriveIndexed(d),
-      }))
-      setDocs(mapped)
+      const data = await listAdminDocuments()
+      setDocs(data)
     } catch (e) {
       console.error('[admin/documents] load error', e)
       Alert.alert('Error', 'Could not load documents from the server.')
@@ -129,522 +76,293 @@ export default function DocumentsPage() {
       (d) =>
         d.title.toLowerCase().includes(q) ||
         d.fileName.toLowerCase().includes(q) ||
-        subjectLabel(d.subject).toLowerCase().includes(q) ||
-        ownerName(d).toLowerCase().includes(q)
+        d.ownerName.toLowerCase().includes(q)
     )
   }, [docs, search])
 
-  const openEdit = (d: AdminDoc) => {
-    setEditDoc(d)
-    setEditTitle(d.title)
-    setEditSubject(subjectLabel(d.subject))
-    setEditDesc(d.description || '')
-    setEditVisible(true)
-  }
-
-  const saveEdit = async () => {
-    if (!editDoc) return
-    if (!editTitle.trim()) {
-      Alert.alert('Validation', 'Title is required.')
-      return
-    }
-    setSaving(true)
-    try {
-      const updated = await updateDocument(editDoc.id, {
-        title: editTitle.trim(),
-        subject: editSubject.trim() || undefined,
-        description: editDesc.trim() || undefined,
-      })
-      setDocs((prev) =>
-        prev.map((d) =>
-          d.id === editDoc.id
-            ? {
-                ...d,
-                ...updated,
-                ownerName: ownerName(updated),
-                updated: timeAgo(updated.updatedAt),
-                indexed: deriveIndexed(updated),
-              }
-            : d
-        )
-      )
-      setEditVisible(false)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Save failed'
-      Alert.alert('Error', msg)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const INDEXED_COLOR: Record<IndexedStatus, string> = {
-    indexed: C.success,
-    pending: C.warning,
-    failed: C.error,
-  }
-  const INDEXED_BG: Record<IndexedStatus, string> = {
-    indexed: C.successDim,
-    pending: C.warningDim,
-    failed: C.errorDim,
-  }
-
-  const renderDoc = ({ item }: { item: AdminDoc }) => {
-    const owner = ownerName(item)
-    const initials = owner
-      .split(' ')
-      .map((n) => n[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join('')
-      .toUpperCase() || '?'
-
-    return (
-      <Card elevated style={styles.docCard} padding="md">
-        <View style={styles.docCardInner}>
-          <View style={styles.docTop}>
-            <View style={styles.docIconWrap}>
-              <FileCog size={20} color={C.accentGold} />
-            </View>
-            <View style={styles.docInfo}>
-              <Text style={styles.docTitle} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.docFileName} numberOfLines={1}>{item.fileName}</Text>
-            </View>
-            <View style={[styles.indexedBadge, { backgroundColor: INDEXED_BG[item.indexed] }]}>
-              <Text style={[styles.indexedText, { color: INDEXED_COLOR[item.indexed] }]}>
-                {INDEXED_LABEL[item.indexed]}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.ownerRow}>
-            <View style={styles.ownerAvatar}>
-              <Text style={styles.ownerAvatarText}>{initials}</Text>
-            </View>
-            <View style={styles.ownerInfo}>
-              <Text style={styles.ownerName} numberOfLines={1}>{owner}</Text>
-              {item.ownerEmail ? (
-                <Text style={styles.ownerEmail} numberOfLines={1}>{item.ownerEmail}</Text>
-              ) : null}
-            </View>
-          </View>
-
-          <View style={styles.docMeta}>
-            {subjectLabel(item.subject) ? (
-              <View style={styles.subjectPill}>
-                <Text style={styles.subjectPillText}>{subjectLabel(item.subject)}</Text>
-              </View>
-            ) : null}
-            <Text style={styles.updatedText}>Updated {item.updated}</Text>
-          </View>
-
-          <View style={styles.docActions}>
-            <Pressable
-              onPress={() => Alert.alert('Open Document', `"${item.title}" — file viewer not available yet.`)}
-              style={({ pressed }) => [styles.openBtn, pressed && { opacity: 0.7 }]}
-            >
-              <Text style={styles.openBtnText}>Open</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => openEdit(item)}
-              style={({ pressed }) => [styles.editMetaBtn, pressed && { opacity: 0.75 }]}
-            >
-              <View style={[styles.editMetaBtnGrad, { backgroundColor: C.primary }]}>
-                <Text style={styles.editMetaBtnText}>Edit metadata</Text>
-              </View>
-            </Pressable>
-          </View>
-        </View>
-      </Card>
-    )
+  const openView = (d: AdminDocument) => {
+    setViewDoc(d)
+    setViewVisible(true)
   }
 
   const styles = useMemo(() => StyleSheet.create({
     safe: { flex: 1 },
-    searchRow: {
+    content: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 40, gap: Spacing.md },
+    pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
+    pageSubtitle: { fontSize: FontSize.sm, color: C.muted, lineHeight: 20 },
+    searchWrap: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: Spacing.sm,
-      paddingHorizontal: Spacing.lg,
-      paddingVertical: Spacing.sm,
     },
-    searchFlex: { flex: 1 },
-    countBadge: {
-      backgroundColor: C.primaryDim,
-      borderRadius: Radius.full,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderWidth: 1,
-      borderColor: `${C.primary}30`,
-    },
-    countText: {
-      fontSize: FontSize.xs,
-      fontWeight: '700',
-      color: C.primary,
-    },
-    list: {
-      padding: Spacing.lg,
+    docCard: {
+      padding: Spacing.md,
       gap: Spacing.sm,
-      paddingBottom: Spacing.xxl + 16,
+      marginBottom: Spacing.sm,
     },
-    docCard: { padding: 0 },
-    docCardInner: { gap: Spacing.sm },
-    docTop: {
+    docTopRow: {
       flexDirection: 'row',
       alignItems: 'flex-start',
+      justifyContent: 'space-between',
       gap: Spacing.sm,
     },
-    docIconWrap: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      backgroundColor: 'rgba(201,134,14,0.1)',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
-    },
-    docInfo: { flex: 1, gap: 3 },
     docTitle: {
-      fontSize: FontSize.sm,
+      fontSize: FontSize.base,
       fontWeight: '700',
       color: C.text,
-    },
-    docFileName: {
-      fontSize: FontSize.xs,
-      color: C.muted,
+      flex: 1,
     },
     indexedBadge: {
-      alignSelf: 'flex-start',
       paddingHorizontal: 8,
-      paddingVertical: 3,
+      paddingVertical: 2,
       borderRadius: Radius.full,
     },
     indexedText: {
       fontSize: 10,
       fontWeight: '700',
+      textTransform: 'uppercase',
     },
-    ownerRow: {
+    docMetaRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: Spacing.sm,
-      paddingTop: Spacing.sm,
-      borderTopWidth: 1,
-      borderTopColor: C.cardBorder,
+      flexWrap: 'wrap',
+      gap: 12,
     },
-    ownerAvatar: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      backgroundColor: C.primaryDim,
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
-    },
-    ownerAvatarText: {
-      fontSize: 10,
-      fontWeight: '800',
-      color: C.primary,
-    },
-    ownerInfo: { flex: 1, gap: 1 },
-    ownerName: {
+    docMetaText: {
       fontSize: FontSize.xs,
-      fontWeight: '600',
       color: C.textSecondary,
     },
-    ownerEmail: {
-      fontSize: FontSize.xs,
-      color: C.muted,
-    },
-    docMeta: {
+    actionBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: Spacing.sm,
-      flexWrap: 'wrap',
+      justifyContent: 'center',
+      gap: 6,
+      backgroundColor: C.cardElevated,
+      borderWidth: 1,
+      borderColor: C.cardBorder,
+      paddingVertical: 10,
+      borderRadius: Radius.md,
+      marginTop: 4,
     },
-    subjectPill: {
-      backgroundColor: C.primaryDim,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: Radius.full,
-    },
-    subjectPillText: {
-      fontSize: FontSize.xs,
-      color: C.primary,
+    actionText: {
+      fontSize: FontSize.sm,
       fontWeight: '600',
-    },
-    updatedText: {
-      fontSize: FontSize.xs,
-      color: C.muted,
-    },
-    docActions: {
-      flexDirection: 'row',
-      gap: Spacing.sm,
-    },
-    openBtn: {
-      height: 36,
-      paddingHorizontal: Spacing.md,
-      borderRadius: Radius.md,
-      borderWidth: 1.5,
-      borderColor: C.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    openBtnText: {
-      fontSize: FontSize.xs,
-      fontWeight: '700',
-      color: C.primary,
-    },
-    editMetaBtn: {
-      flex: 1,
-      borderRadius: Radius.md,
-      overflow: 'hidden',
-      height: 36,
-    },
-    editMetaBtnGrad: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    editMetaBtnText: {
-      fontSize: FontSize.xs,
-      fontWeight: '700',
-      color: '#fff',
+      color: C.text,
     },
     empty: {
       alignItems: 'center',
-      paddingTop: Spacing.xxl + 16,
+      paddingTop: Spacing.xxl,
       gap: Spacing.md,
     },
     emptyIcon: {
-      width: 64,
-      height: 64,
-      borderRadius: 18,
-      backgroundColor: 'rgba(201,134,14,0.1)',
+      width: 72,
+      height: 72,
+      borderRadius: 20,
+      backgroundColor: C.primaryDim,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    emptyTitle: {
-      fontSize: FontSize.sm,
-      color: C.muted,
-      textAlign: 'center',
-    },
-    overlay: {
+    emptyTitle: { fontSize: FontSize.md, fontWeight: '700', color: C.text },
+    emptyDesc: { fontSize: FontSize.sm, color: C.muted, textAlign: 'center', maxWidth: 280, lineHeight: 20 },
+    
+    // View Modal Styles
+    modalOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(10,14,26,0.55)',
+      backgroundColor: C.overlay,
       justifyContent: 'flex-end',
     },
-    sheet: {
+    modalContent: {
       backgroundColor: C.card,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
+      borderTopLeftRadius: Radius.xl,
+      borderTopRightRadius: Radius.xl,
       padding: Spacing.lg,
       paddingBottom: Spacing.xxl,
-      maxHeight: '80%',
-      gap: Spacing.sm,
+      maxHeight: '90%',
     },
-    sheetHandle: {
-      alignSelf: 'center',
-      width: 40,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: C.cardBorder,
-      marginBottom: Spacing.sm,
-    },
-    sheetHeader: {
+    modalHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: Spacing.sm,
+      marginBottom: Spacing.lg,
     },
-    sheetTitle: {
-      fontSize: FontSize.lg,
-      fontWeight: '800',
-      color: C.text,
-    },
-    fieldGroup: {
-      gap: 6,
-      marginBottom: Spacing.md,
-    },
-    fieldLabel: {
-      fontSize: FontSize.sm,
-      fontWeight: '600',
-      color: C.textSecondary,
-    },
-    req: { color: C.error },
-    textField: {
-      height: 50,
+    modalTitle: { fontSize: FontSize.lg, fontWeight: '700', color: C.text },
+    modalClose: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       backgroundColor: C.cardElevated,
-      borderWidth: 1.5,
-      borderColor: C.cardBorder,
-      borderRadius: Radius.lg,
-      paddingHorizontal: Spacing.md,
-      fontSize: FontSize.base,
-      color: C.text,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    textArea: {
-      height: 90,
-      paddingTop: Spacing.sm,
-      paddingBottom: Spacing.sm,
-    },
-    sheetActions: {
+    detailRow: {
       flexDirection: 'row',
-      gap: Spacing.sm,
-      marginTop: Spacing.sm,
+      justifyContent: 'space-between',
+      paddingVertical: Spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: C.cardBorder,
     },
-    sheetBtn: {
-      flex: 1,
-      height: 50,
-      borderRadius: Radius.lg,
-      overflow: 'hidden',
-    },
-    cancelBtn: {
-      borderWidth: 1.5,
-      borderColor: C.cardBorder,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: C.cardElevated,
-    },
-    cancelBtnText: {
-      fontSize: FontSize.base,
-      fontWeight: '700',
-      color: C.muted,
-    },
-    saveBtnGrad: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    saveBtnText: {
-      fontSize: FontSize.base,
-      fontWeight: '700',
-      color: '#fff',
-    },
+    detailLabel: { fontSize: FontSize.sm, color: C.muted, fontWeight: '600' },
+    detailValue: { fontSize: FontSize.sm, color: C.text, fontWeight: '500', maxWidth: '65%', textAlign: 'right' },
   }), [C])
 
+  const getIndexedColor = (status: string) => {
+    if (status === 'indexed') return { bg: C.successDim, text: C.success }
+    if (status === 'failed') return { bg: C.errorDim, text: C.error }
+    return { bg: C.warningDim, text: C.warning }
+  }
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={C.primary} />
+      </View>
+    )
+  }
+
   return (
-    <View style={{ flex: 1 }}>
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.searchRow}>
-          <View style={styles.searchFlex}>
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true)
+              loadDocs()
+            }}
+            tintColor={C.primary}
+          />
+        }
+      >
+        <View style={{ gap: 4, marginBottom: Spacing.sm }}>
+          <Text style={styles.pageTitle}>Document Corpus</Text>
+          <Text style={styles.pageSubtitle}>
+            Monitor and manage knowledge base documents.
+          </Text>
+        </View>
+
+        <View style={styles.searchWrap}>
+          <View style={{ flex: 1 }}>
             <Input
-              placeholder="Search title, owner, subject, file"
+              placeholder="Search by title, owner, or file name..."
               value={search}
               onChangeText={setSearch}
-              leftIcon={<Search size={16} color={C.muted} />}
+              leftIcon={<Search size={18} color={C.muted} />}
             />
-          </View>
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>{filtered.length} visible</Text>
           </View>
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => { setRefreshing(true); loadDocs() }}
-              tintColor={C.primary}
-            />
-          }
-        >
-          {filtered.map((item) => renderDoc({ item }))}
-          {!loading && filtered.length === 0 ? (
-            <View style={styles.empty}>
-              <View style={styles.emptyIcon}>
-                <FileCog size={32} color={C.muted} strokeWidth={1.5} />
-              </View>
-              <Text style={styles.emptyTitle}>
-                No documents match the current search.
-              </Text>
+        {filtered.length === 0 ? (
+          <View style={styles.empty}>
+            <View style={styles.emptyIcon}>
+              <FileText size={36} color={C.muted} strokeWidth={1.5} />
             </View>
-          ) : null}
-        </ScrollView>
-      </SafeAreaView>
+            <Text style={styles.emptyTitle}>No documents found</Text>
+            {search ? (
+              <Text style={styles.emptyDesc}>Try a different search term.</Text>
+            ) : (
+              <Text style={styles.emptyDesc}>Documents uploaded by users will appear here.</Text>
+            )}
+          </View>
+        ) : (
+          filtered.map((d) => {
+            const idxStyle = getIndexedColor(d.indexedStatus)
+            return (
+              <Card elevated key={d.id} style={styles.docCard}>
+                <View style={styles.docTopRow}>
+                  <Text style={styles.docTitle} numberOfLines={2}>{d.title}</Text>
+                  <View style={[styles.indexedBadge, { backgroundColor: idxStyle.bg }]}>
+                    <Text style={[styles.indexedText, { color: idxStyle.text }]}>{d.indexedStatus}</Text>
+                  </View>
+                </View>
+                <View style={styles.docMetaRow}>
+                  <Text style={styles.docMetaText}>{d.fileType} • {(d.fileSize / 1024 / 1024).toFixed(1)}MB</Text>
+                  <Text style={styles.docMetaText}>{timeAgo(d.updatedAt)}</Text>
+                  <Text style={styles.docMetaText}>{d.ownerName || 'Unknown owner'}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+                  {!!d.fileUrl && (
+                    <Pressable
+                      style={({ pressed }) => [styles.actionBtn, { flex: 1 }, pressed && { opacity: 0.7 }]}
+                      onPress={() => Linking.openURL(d.fileUrl)}
+                    >
+                      <ExternalLink size={16} color={C.textSecondary} />
+                      <Text style={styles.actionText}>Open File</Text>
+                    </Pressable>
+                  )}
+                  <Pressable
+                    style={({ pressed }) => [styles.actionBtn, { flex: 1 }, pressed && { opacity: 0.7 }]}
+                    onPress={() => openView(d)}
+                  >
+                    <Eye size={16} color={C.textSecondary} />
+                    <Text style={styles.actionText}>View Details</Text>
+                  </Pressable>
+                </View>
+              </Card>
+            )
+          })
+        )}
+      </ScrollView>
 
+      {/* View Details Modal */}
       <Modal
-        visible={editVisible}
+        visible={viewVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => setEditVisible(false)}
+        onRequestClose={() => setViewVisible(false)}
       >
-        <Pressable style={styles.overlay} onPress={() => setEditVisible(false)}>
-          <View style={styles.sheet} onStartShouldSetResponder={() => true}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Edit Metadata</Text>
-              <Pressable onPress={() => setEditVisible(false)} hitSlop={8}>
-                <X size={20} color={C.muted} />
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Document Metadata</Text>
+              <Pressable
+                style={styles.modalClose}
+                onPress={() => setViewVisible(false)}
+                hitSlop={8}
+              >
+                <X size={18} color={C.textSecondary} />
               </Pressable>
             </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Title <Text style={styles.req}>*</Text></Text>
-                <TextInput
-                  style={styles.textField}
-                  value={editTitle}
-                  onChangeText={setEditTitle}
-                  placeholder="Document title"
-                  placeholderTextColor={C.muted}
-                  returnKeyType="next"
-                />
-              </View>
-
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Subject</Text>
-                <TextInput
-                  style={styles.textField}
-                  value={editSubject}
-                  onChangeText={setEditSubject}
-                  placeholder="e.g. Physics, Mathematics…"
-                  placeholderTextColor={C.muted}
-                  returnKeyType="next"
-                />
-              </View>
-
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Description</Text>
-                <TextInput
-                  style={[styles.textField, styles.textArea]}
-                  value={editDesc}
-                  onChangeText={setEditDesc}
-                  placeholder="Brief description…"
-                  placeholderTextColor={C.muted}
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                />
-              </View>
-            </ScrollView>
-
-            <View style={styles.sheetActions}>
-              <Pressable
-                onPress={() => setEditVisible(false)}
-                style={[styles.sheetBtn, styles.cancelBtn]}
-              >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={saveEdit}
-                disabled={saving}
-                style={styles.sheetBtn}
-              >
-                <View
-                  style={[
-                    styles.saveBtnGrad,
-                    { backgroundColor: saving ? C.muted : C.primary },
-                  ]}
-                >
-                  <Text style={styles.saveBtnText}>
-                    {saving ? 'Saving...' : 'Save'}
-                  </Text>
+            {viewDoc && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Title</Text>
+                  <Text style={styles.detailValue}>{viewDoc.title}</Text>
                 </View>
-              </Pressable>
-            </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>File Name</Text>
+                  <Text style={styles.detailValue}>{viewDoc.fileName}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Owner</Text>
+                  <Text style={styles.detailValue}>{viewDoc.ownerName}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Owner Email</Text>
+                  <Text style={styles.detailValue}>{viewDoc.ownerEmail || 'N/A'}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Status</Text>
+                  <Text style={styles.detailValue}>{viewDoc.status}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Visibility</Text>
+                  <Text style={styles.detailValue}>{viewDoc.visibility}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Indexed Status</Text>
+                  <Text style={styles.detailValue}>{viewDoc.indexedStatus}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Created At</Text>
+                  <Text style={styles.detailValue}>{new Date(viewDoc.createdAt).toLocaleString()}</Text>
+                </View>
+              </ScrollView>
+            )}
           </View>
-        </Pressable>
+        </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   )
 }

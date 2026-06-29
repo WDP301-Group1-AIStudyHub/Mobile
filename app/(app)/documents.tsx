@@ -309,7 +309,7 @@ export default function DocumentsPage() {
                 <FileText size={20} color={C.primary} strokeWidth={2} />
               </View>
               <View>
-                <Text style={[styles.title, { color: '#ffffff' }]}>Documents</Text>
+                <Text style={[styles.title, { color: C.text }]}>Documents</Text>
                 <Text style={[styles.subtitle, { color: C.muted }]}>
                   {loading ? 'Loading...' : `${docs.length} documents`}
                 </Text>

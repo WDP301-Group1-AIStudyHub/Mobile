@@ -35,15 +35,18 @@ export default function ProfilePage() {
   const C = useColors()
   const { isDark, toggle } = useTheme()
 
-  const menuSections = useMemo(() => [
-    {
-      title: 'Account',
-      items: [
-        { icon: User, label: 'Edit Profile', key: 'profile' as MenuKey, color: C.primary },
-        { icon: Lock, label: 'Change Password', key: 'password' as MenuKey, color: C.accent },
-        { icon: Bell, label: 'Notifications', key: 'notifications' as MenuKey, color: C.accentGold },
-      ],
-    },
+  const user = state.status === 'authenticated' ? state.user : null
+  
+  const menuSections = useMemo(() => {
+    const sections = [
+      {
+        title: 'Account',
+        items: [
+          { icon: User, label: 'Edit Profile', key: 'profile' as MenuKey, color: C.primary },
+          { icon: Lock, label: 'Change Password', key: 'password' as MenuKey, color: C.accent },
+          { icon: Bell, label: 'Notifications', key: 'notifications' as MenuKey, color: C.accentGold },
+        ],
+      },
     {
       title: 'Preferences',
       items: [
@@ -58,13 +61,15 @@ export default function ProfilePage() {
         { icon: Shield, label: 'Privacy & Security', key: 'security' as MenuKey, color: C.error },
         { icon: Settings, label: 'App Settings', key: 'settings' as MenuKey, color: C.muted },
       ],
-    },
-  ], [C, isDark])
+    }
+    ]
+    return sections
+  }, [C, isDark, user?.role])
 
   const styles = useMemo(() => StyleSheet.create({
     safe: { flex: 1 },
     content: { padding: Spacing.lg, paddingBottom: Spacing.xxl, gap: Spacing.lg },
-    pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: '#ffffff', letterSpacing: -0.5 },
+    pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
     profileCard: {
       backgroundColor: C.card, borderWidth: 1, borderColor: C.cardBorder,
       borderRadius: 20, padding: Spacing.lg, flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
@@ -118,17 +123,20 @@ export default function ProfilePage() {
     version: { textAlign: 'center', fontSize: FontSize.xs, color: C.muted },
   }), [C])
 
-  const user = state.status === 'authenticated' ? state.user : null
+
 
   const handleMenuPress = (key: MenuKey) => {
+    const basePath = user?.role === 'admin' ? '/admin' : '/(app)'
     if (key === 'profile') {
-      router.push('/(app)/edit-profile')
+      router.push(`${basePath}/edit-profile` as any)
     } else if (key === 'password') {
-      router.push('/(app)/change-password')
+      router.push(`${basePath}/change-password` as any)
     } else if (key === 'theme') {
       toggle()
     } else if (key === 'subjects') {
-      router.push('/(app)/subjects')
+      if (user?.role !== 'admin') {
+        router.push('/(app)/subjects')
+      }
     }
   }
 
@@ -193,25 +201,27 @@ export default function ProfilePage() {
             </Pressable>
           </View>
 
-          {/* Stats Row */}
-          <View style={styles.statsRow}>
-            {[
-              { label: 'Documents', value: '342' },
-              { label: 'Chats', value: '18' },
-              { label: 'Subjects', value: '12' },
-            ].map((s, idx) => (
-              <View
-                key={s.label}
-                style={[
-                  styles.statItem,
-                  idx < 2 && { borderRightWidth: 1, borderRightColor: C.cardBorder },
-                ]}
-              >
-                <Text style={styles.statValue}>{s.value}</Text>
-                <Text style={styles.statLabel}>{s.label}</Text>
-              </View>
-            ))}
-          </View>
+          {/* Stats Row - Only for normal users */}
+          {user?.role !== 'admin' && (
+            <View style={styles.statsRow}>
+              {[
+                { label: 'Documents', value: '342' },
+                { label: 'Chats', value: '18' },
+                { label: 'Subjects', value: '12' },
+              ].map((s, idx) => (
+                <View
+                  key={s.label}
+                  style={[
+                    styles.statItem,
+                    idx < 2 && { borderRightWidth: 1, borderRightColor: C.cardBorder },
+                  ]}
+                >
+                  <Text style={styles.statValue}>{s.value}</Text>
+                  <Text style={styles.statLabel}>{s.label}</Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Menu Sections */}
           {menuSections.map((section) => (

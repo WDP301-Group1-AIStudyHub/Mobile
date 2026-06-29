@@ -87,7 +87,7 @@ export default function EditProfilePage() {
   pageTitle: {
     fontSize: FontSize.md,
     fontWeight: '700',
-    color: '#ffffff',
+    color: C.text,
     letterSpacing: -0.3,
   },
   avatarSection: {

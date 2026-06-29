@@ -182,7 +182,7 @@ export default function BenchmarksPage() {
     topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     topBarRight: { flexDirection: 'row', gap: Spacing.sm },
     headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-    pageTitle: { fontSize: FontSize.xl, fontWeight: '700', color: '#ffffff', letterSpacing: 0.2 },
+    pageTitle: { fontSize: FontSize.xl, fontWeight: '700', color: C.text, letterSpacing: 0.2 },
     pageSub: { fontSize: FontSize.sm, color: C.muted, marginTop: 3, maxWidth: '75%' },
     addBtn: { borderRadius: Radius.lg, backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 9 },
     addBtnText: { fontSize: FontSize.sm, fontWeight: '700', color: '#fff' },
