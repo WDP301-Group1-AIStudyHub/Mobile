@@ -1,8 +1,14 @@
 import axios from 'axios'
+import { Platform } from 'react-native'
 import { clearAuthSession, getStoredToken } from './authStorage'
 
-export const API_BASE_URL =
+const configuredApiBaseUrl =
   process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/+$/, '') || 'https://backendd-vn1j.onrender.com'
+
+export const API_BASE_URL =
+  Platform.OS === 'web' && configuredApiBaseUrl.includes('10.0.2.2')
+    ? configuredApiBaseUrl.replace('10.0.2.2', 'localhost')
+    : configuredApiBaseUrl
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

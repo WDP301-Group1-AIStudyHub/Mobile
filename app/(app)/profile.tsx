@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   Pressable,
@@ -26,6 +26,9 @@ import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors, useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../hooks/useAuth'
+import { listChatHistory } from '../../services/chatApi'
+import { listDocuments } from '../../services/documentApi'
+import { listSubjects } from '../../services/subjectApi'
 
 type MenuKey = 'profile' | 'password' | 'notifications' | 'theme' | 'subjects' | 'model' | 'security' | 'settings'
 
@@ -34,8 +37,31 @@ export default function ProfilePage() {
   const [signingOut, setSigningOut] = useState(false)
   const C = useColors()
   const { isDark, toggle } = useTheme()
+  const [stats, setStats] = useState({ documents: 0, chats: 0, subjects: 0 })
 
   const user = state.status === 'authenticated' ? state.user : null
+
+  useEffect(() => {
+    let active = true
+    if (!user || user.role === 'admin') return
+
+    Promise.all([
+      listDocuments().catch(() => []),
+      listChatHistory().catch(() => ({ histories: [], total: 0 })),
+      listSubjects().catch(() => []),
+    ]).then(([documents, chats, subjects]) => {
+      if (!active) return
+      setStats({
+        documents: documents.length,
+        chats: chats.total || chats.histories.length,
+        subjects: subjects.length,
+      })
+    })
+
+    return () => {
+      active = false
+    }
+  }, [user])
   
   const menuSections = useMemo(() => {
     const sections = [
@@ -67,8 +93,8 @@ export default function ProfilePage() {
   }, [C, isDark, user?.role])
 
   const styles = useMemo(() => StyleSheet.create({
-    safe: { flex: 1 },
-    content: { padding: Spacing.lg, paddingBottom: Spacing.xxl, gap: Spacing.lg },
+    safe: { flex: 1, backgroundColor: C.background },
+    content: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 96, gap: Spacing.lg },
     pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
     profileCard: {
       backgroundColor: C.card, borderWidth: 1, borderColor: C.cardBorder,
@@ -151,8 +177,11 @@ export default function ProfilePage() {
           style: 'destructive',
           onPress: async () => {
             setSigningOut(true)
-            await signOut()
-            router.replace('/(auth)/login')
+            try {
+              await signOut()
+            } finally {
+              setSigningOut(false)
+            }
           },
         },
       ],
@@ -205,9 +234,9 @@ export default function ProfilePage() {
           {user?.role !== 'admin' && (
             <View style={styles.statsRow}>
               {[
-                { label: 'Documents', value: '342' },
-                { label: 'Chats', value: '18' },
-                { label: 'Subjects', value: '12' },
+                { label: 'Documents', value: String(stats.documents) },
+                { label: 'Chats', value: String(stats.chats) },
+                { label: 'Subjects', value: String(stats.subjects) },
               ].map((s, idx) => (
                 <View
                   key={s.label}

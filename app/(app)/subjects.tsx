@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
-  listContent: { gap: Spacing.md, paddingBottom: Spacing.xxl + 16 },
+  listContent: { gap: Spacing.md, paddingBottom: Spacing.xxl + 96 },
   loadingWrap: { paddingTop: 60, alignItems: 'center' },
   empty: { alignItems: 'center', paddingTop: 60, gap: Spacing.sm },
   emptyIcon: {

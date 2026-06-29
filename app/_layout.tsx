@@ -64,10 +64,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, EBState> {
 // ── App Stack ─────────────────────────────────────────────────────────────────
 function AppStack() {
   const { isDark } = useTheme()
+  const backgroundColor = isDark ? '#0f172a' : '#f7f8f1'
   return (
     <VideoBg>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }}>
+      <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(app)" />

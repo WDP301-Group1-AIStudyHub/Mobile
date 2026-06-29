@@ -78,3 +78,75 @@ export async function deleteChatHistory(id: string): Promise<void> {
     return handleAxiosError(error)
   }
 }
+
+// ── Thread based history APIs ────────────────────────────────────────────────
+
+export interface ChatThreadItem {
+  id: string
+  _id?: string
+  ownerId: string
+  title: string
+  status: 'ACTIVE' | 'ARCHIVED'
+  lastMessageAt: string
+  messageCount: number
+  scope?: string
+  subjectId?: string
+  documentId?: string
+  documentIds?: string[]
+  mode?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ChatThreadMessage {
+  id: string
+  _id?: string
+  userId: string
+  threadId: string
+  question: string
+  originalQuestion?: string
+  rewrittenQuery?: string
+  answer: string
+  sources: any[]
+  documentId?: string
+  documentIds?: string[]
+  subjectId?: string
+  scope: string
+  mode: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ChatThreadDetail {
+  thread: ChatThreadItem
+  messages: ChatThreadMessage[]
+}
+
+export async function listChatThreads(): Promise<ChatThreadItem[]> {
+  try {
+    const { data } = await apiClient.get<ApiResponse<ChatThreadItem[] | { threads: ChatThreadItem[] }>>('/api/chat/threads')
+    if (!data.data) return []
+    if (Array.isArray(data.data)) return data.data
+    return (data.data as any).threads ?? []
+  } catch (error) {
+    return handleAxiosError(error)
+  }
+}
+
+export async function getChatThreadById(threadId: string): Promise<ChatThreadDetail> {
+  try {
+    const { data } = await apiClient.get<ApiResponse<ChatThreadDetail>>(`/api/chat/threads/${threadId}`)
+    if (!data.data) throw new ChatApiError('Chat thread not found', 404)
+    return data.data
+  } catch (error) {
+    return handleAxiosError(error)
+  }
+}
+
+export async function deleteChatThread(threadId: string): Promise<void> {
+  try {
+    await apiClient.delete(`/api/chat/threads/${threadId}`)
+  } catch (error) {
+    return handleAxiosError(error)
+  }
+}

@@ -72,8 +72,8 @@ export default function AdminDashboard() {
   }
 
   const styles = useMemo(() => StyleSheet.create({
-    safe: { flex: 1 },
-    scroll: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 16 },
+    safe: { flex: 1, backgroundColor: C.background },
+    scroll: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 96 },
     statsGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -307,7 +307,7 @@ export default function AdminDashboard() {
               </View>
             </View>
             <Text style={styles.activityDesc}>{ev.description}</Text>
-            <Text style={styles.activityActors}>{ev.actor} → {ev.target}</Text>
+            <Text style={styles.activityActors}>{ev.actor} -&gt; {ev.target}</Text>
           </Card>
         ))}
 

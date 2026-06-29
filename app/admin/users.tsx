@@ -97,10 +97,10 @@ export default function UsersPage() {
   }
 
   const styles = useMemo(() => StyleSheet.create({
-    safe: { flex: 1 },
+    safe: { flex: 1, backgroundColor: C.background },
     content: {
       padding: Spacing.lg,
-      paddingBottom: Spacing.xxl + 40,
+      paddingBottom: Spacing.xxl + 96,
       gap: Spacing.md,
     },
     pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },

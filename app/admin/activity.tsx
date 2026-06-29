@@ -121,7 +121,7 @@ export default function ActivityPage() {
   }, [logs, search, severityFilter, typeFilter])
 
   const styles = useMemo(() => StyleSheet.create({
-    safe: { flex: 1 },
+    safe: { flex: 1, backgroundColor: C.background },
     searchRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -180,7 +180,7 @@ export default function ActivityPage() {
     },
     listContent: {
       padding: Spacing.lg,
-      paddingBottom: Spacing.xxl + 40,
+      paddingBottom: Spacing.xxl + 96,
     },
     eventCard: {
       marginBottom: Spacing.sm,
@@ -289,7 +289,7 @@ export default function ActivityPage() {
           </View>
           <View style={styles.eventText}>
             <Text style={styles.eventDesc}>{item.description}</Text>
-            <Text style={styles.eventActors} numberOfLines={1}>{item.actor} → {item.target}</Text>
+            <Text style={styles.eventActors} numberOfLines={1}>{item.actor} -&gt; {item.target}</Text>
           </View>
         </View>
       </Card>

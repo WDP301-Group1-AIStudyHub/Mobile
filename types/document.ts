@@ -52,6 +52,7 @@ export interface DocumentItem {
   fileSize: number
   extractedText?: string
   uploadedBy: string
+  ownerId?: string
   createdAt: string
   updatedAt: string
 

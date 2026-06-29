@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { Tabs, router } from 'expo-router'
-import { LayoutDashboard, MessageCircle, User, BarChart2, FileText, FolderOpen } from 'lucide-react-native'
+import { LayoutDashboard, MessageCircle, User, FileText, FolderOpen, Brain } from 'lucide-react-native'
 import { View, StyleSheet, Platform, ActivityIndicator } from 'react-native'
 
 import { useColors } from '../../contexts/ThemeContext'
@@ -8,28 +8,20 @@ import { useAuth } from '../../hooks/useAuth'
 
 const tabIconStyles = StyleSheet.create({
   iconWrap: {
-    width: 40,
-    height: 34,
+    width: 44,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  iconWrapActive: {
-    width: 40,
-    height: 34,
+    borderRadius: 10,
   },
 })
 
 function TabIcon({ icon: Icon, focused }: { icon: typeof LayoutDashboard; focused: boolean }) {
   const C = useColors()
   return (
-    <View style={[tabIconStyles.iconWrap, focused && tabIconStyles.iconWrapActive]}>
-      {focused && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: C.primary, borderRadius: 12 }]} />
-      )}
+    <View style={[tabIconStyles.iconWrap, focused && { backgroundColor: C.primary }]}>
       <Icon
-        size={21}
+        size={19}
         color={focused ? '#fff' : (C.background === 'transparent' ? '#000000' : C.muted)}
         strokeWidth={focused ? 2.2 : 2.5}
       />
@@ -65,9 +57,9 @@ export default function AppLayout() {
       backgroundColor: C.card,
       borderTopWidth: 1,
       borderTopColor: C.cardBorder,
-      height: Platform.OS === 'ios' ? 84 : 72,
-      paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-      paddingTop: 8,
+      height: Platform.OS === 'ios' ? 88 : 82,
+      paddingBottom: Platform.OS === 'ios' ? 26 : 18,
+      paddingTop: 7,
       shadowColor: C.cardShadowColor,
       shadowOffset: { width: 0, height: -4 },
       shadowOpacity: 0.12,
@@ -75,17 +67,20 @@ export default function AppLayout() {
       elevation: 16,
     },
     tabLabel: {
-      fontSize: 11,
+      fontSize: 10,
       fontWeight: '800',
       letterSpacing: 0.2,
-      marginTop: 2,
+      marginTop: 0,
+    },
+    tabItem: {
+      paddingVertical: 2,
     },
   }), [C])
 
   // Don't render tabs until auth state is resolved
   if (state.status !== 'authenticated') {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' }}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.background }}>
         <ActivityIndicator size="large" color={C.primary} />
       </View>
     )
@@ -94,11 +89,12 @@ export default function AppLayout() {
   return (
     <Tabs
       screenOptions={{
-        sceneStyle: { backgroundColor: 'transparent' },
+        sceneStyle: { backgroundColor: C.background },
         headerShown: false,
         tabBarStyle: styles.tabBar,
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.tabLabel,
+        tabBarItemStyle: styles.tabItem,
         tabBarActiveTintColor: C.primary,
         tabBarInactiveTintColor: C.background === 'transparent' ? '#000000' : C.muted,
       }}
@@ -124,15 +120,6 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="chat"
-        options={{
-          title: 'AI Chat',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon icon={MessageCircle} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="dashboard"
         options={{
           title: 'Dashboard',
@@ -142,13 +129,26 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="benchmarks"
+        name="chat"
         options={{
-          title: 'Benchmarks',
+          title: 'AI Chat',
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon={BarChart2} focused={focused} />
+            <TabIcon icon={MessageCircle} focused={focused} />
           ),
         }}
+      />
+      <Tabs.Screen
+        name="study-materials"
+        options={{
+          title: 'Study Sets',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon={Brain} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="benchmarks"
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="profile"
@@ -170,6 +170,14 @@ export default function AppLayout() {
       />
       <Tabs.Screen
         name="document/[id]"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="chat/[id]"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="study-material/[id]"
         options={{ href: null }}
       />
     </Tabs>

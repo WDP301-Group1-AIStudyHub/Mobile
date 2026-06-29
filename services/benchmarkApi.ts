@@ -8,24 +8,38 @@ export interface BenchmarkQuestion {
   question: string
   subject: string
   difficulty: BenchmarkDifficulty
-  expectedAnswer?: string
-  hasResult: boolean
-  winner: 'basic' | 'corrective' | 'tie' | null
-  basicScore: number | null
-  correctiveScore: number | null
+  expectedAnswer: string
+  documentId?: string
   createdAt: string
   updatedAt?: string
 }
 
+export interface BenchmarkEvaluationScore {
+  answerCorrectness: number
+  faithfulness: number
+  relevance: number
+  completeness: number
+  overallScore: number
+  explanation: string
+}
+
+export interface BenchmarkRunResult {
+  id: string
+  benchmarkQuestionId: string
+  question: string
+  expectedAnswer: string
+  answer: string
+  evaluation: BenchmarkEvaluationScore
+  createdAt: string
+}
+
 export interface BenchmarkSummary {
   totalRuns: number
-  basicAvg: number
-  correctiveAvg: number
-  correctiveWinRate: number
-  basicWinRate: number
-  tieRate: number
-  faithfulnessImprovement: string
-  correctnessImprovement: string
+  averageScore: number
+  averageAnswerCorrectness: number
+  averageFaithfulness: number
+  averageRelevance: number
+  averageCompleteness: number
 }
 
 export async function listBenchmarkQuestions(): Promise<BenchmarkQuestion[]> {
@@ -36,7 +50,7 @@ export async function listBenchmarkQuestions(): Promise<BenchmarkQuestion[]> {
 export async function createBenchmarkQuestion(payload: {
   question: string
   subject: string
-  expectedAnswer?: string
+  expectedAnswer: string
   difficulty: BenchmarkDifficulty
 }): Promise<BenchmarkQuestion> {
   const { data } = await apiClient.post<ApiResponse<BenchmarkQuestion>>(
@@ -51,8 +65,8 @@ export async function deleteBenchmarkQuestion(id: string): Promise<void> {
   await apiClient.delete(`/api/benchmark/questions/${id}`)
 }
 
-export async function runBenchmarkQuestion(id: string): Promise<BenchmarkQuestion> {
-  const { data } = await apiClient.post<ApiResponse<BenchmarkQuestion>>(
+export async function runBenchmarkQuestion(id: string): Promise<BenchmarkRunResult> {
+  const { data } = await apiClient.post<ApiResponse<BenchmarkRunResult>>(
     `/api/benchmark/run/${id}`
   )
   if (!data.data) throw new Error(data.message || 'Run failed')
@@ -64,13 +78,11 @@ export async function getBenchmarkSummary(): Promise<BenchmarkSummary> {
   if (!data.data) {
     return {
       totalRuns: 0,
-      basicAvg: 0,
-      correctiveAvg: 0,
-      correctiveWinRate: 0,
-      basicWinRate: 0,
-      tieRate: 0,
-      faithfulnessImprovement: '0%',
-      correctnessImprovement: '0%',
+      averageScore: 0,
+      averageAnswerCorrectness: 0,
+      averageFaithfulness: 0,
+      averageRelevance: 0,
+      averageCompleteness: 0,
     }
   }
   return data.data

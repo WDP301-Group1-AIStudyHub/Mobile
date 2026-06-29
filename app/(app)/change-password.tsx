@@ -61,11 +61,11 @@ export default function ChangePasswordPage() {
 
 
   const styles = useMemo(() => StyleSheet.create({
-  safe: { flex: 1 },
+  safe: { flex: 1, backgroundColor: C.background },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing.xxl + 96,
     gap: Spacing.lg,
   },
   topBar: {

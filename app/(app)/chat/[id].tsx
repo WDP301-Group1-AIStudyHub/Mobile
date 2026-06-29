@@ -116,7 +116,6 @@ export default function ChatConversationPage() {
         question: text,
         documentId: pinnedDoc?.id,
         subject: getSubjectName(pinnedDoc?.subject, ''),
-        mode: 'basic',
       })
       setPinnedDoc(null)
       const aiMsg: Message = {
@@ -137,7 +136,7 @@ export default function ChatConversationPage() {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: isIndexError
-          ? 'Your question has been received. The AI document search feature is currently under maintenance. You can still ask general knowledge questions.'
+          ? 'The AI document search feature is currently unavailable. Please try again after the local backend and vector index are ready.'
           : rawMsg,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       }

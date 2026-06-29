@@ -35,6 +35,7 @@ import Input from '../../components/ui/Input'
 import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
+import { useAuth } from '../../hooks/useAuth'
 import {
   deleteDocument,
   listDocuments,
@@ -84,6 +85,8 @@ function fileTypeColor(type: string | undefined, C: ReturnType<typeof useColors>
 
 export default function DocumentsPage() {
   const C = useColors()
+  const { state } = useAuth()
+  const currentUser = state.status === 'authenticated' ? state.user : null
   const [docs, setDocs] = useState<DocumentItem[]>([])
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
   const [search, setSearch] = useState('')
@@ -285,8 +288,9 @@ export default function DocumentsPage() {
             try {
               await deleteDocument(docId)
               setDocs((prev) => prev.filter((d) => getSafeId(d) !== docId))
-            } catch {
-              Alert.alert('Error', 'Could not delete document.')
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : 'Could not delete document.'
+              Alert.alert('Error', msg)
             }
           },
         },
@@ -526,26 +530,28 @@ export default function DocumentsPage() {
                                   ) : null}
                                 </View>
                               </View>
-                              <View style={styles.docActions}>
-                                <Pressable
-                                  onPress={() => toggleVisibility(d)}
-                                  hitSlop={8}
-                                  style={styles.iconBtn}
-                                >
-                                  {d.visibility === 'PUBLIC' ? (
-                                    <Lock size={12} color={C.muted} />
-                                  ) : (
-                                    <Globe size={12} color={C.success} />
-                                  )}
-                                </Pressable>
-                                <Pressable
-                                  onPress={() => removeDoc(d)}
-                                  hitSlop={8}
-                                  style={styles.iconBtn}
-                                >
-                                  <Trash2 size={12} color={C.error} />
-                                </Pressable>
-                              </View>
+                              {currentUser && (d.ownerId === currentUser.id || currentUser.role === 'admin') ? (
+                                <View style={styles.docActions}>
+                                  <Pressable
+                                    onPress={() => toggleVisibility(d)}
+                                    hitSlop={8}
+                                    style={styles.iconBtn}
+                                  >
+                                    {d.visibility === 'PUBLIC' ? (
+                                      <Lock size={12} color={C.muted} />
+                                    ) : (
+                                      <Globe size={12} color={C.success} />
+                                    )}
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={() => removeDoc(d)}
+                                    hitSlop={8}
+                                    style={styles.iconBtn}
+                                  >
+                                    <Trash2 size={12} color={C.error} />
+                                  </Pressable>
+                                </View>
+                              ) : null}
                             </Pressable>
                           )
                         })}
@@ -771,48 +777,7 @@ export default function DocumentsPage() {
                 ]}
               />
 
-              <Text style={[styles.label, { color: C.textSecondary }]}>
-                Visibility
-              </Text>
-              <View style={styles.visRow}>
-                {(['PRIVATE', 'PUBLIC'] as DocumentVisibility[]).map((v) => {
-                  const active = formVisibility === v
-                  return (
-                    <Pressable
-                      key={v}
-                      onPress={() => setFormVisibility(v)}
-                      disabled={uploading}
-                      style={({ pressed }) => [
-                        styles.visBtn,
-                        {
-                          backgroundColor: active
-                            ? C.primaryDim
-                            : C.cardElevated,
-                          borderColor: active ? C.primary : C.cardBorder,
-                        },
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      {v === 'PUBLIC' ? (
-                        <Globe
-                          size={14}
-                          color={active ? C.primary : C.muted}
-                        />
-                      ) : (
-                        <Lock size={14} color={active ? C.primary : C.muted} />
-                      )}
-                      <Text
-                        style={[
-                          styles.visText,
-                          { color: active ? C.primary : C.text },
-                        ]}
-                      >
-                        {v}
-                      </Text>
-                    </Pressable>
-                  )
-                })}
-              </View>
+
 
               <Pressable
                 onPress={submitUpload}

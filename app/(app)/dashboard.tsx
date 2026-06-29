@@ -6,6 +6,8 @@ import {
   Archive,
   Bell,
   BookOpen,
+  Brain,
+  ChevronRight,
   Database,
   FileText,
   MessageCircle,
@@ -192,6 +194,45 @@ export default function DashboardPage() {
     },
     aiBtnText: { fontSize: FontSize.sm, fontWeight: '700', color: C.primary },
     aiCaption: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)', fontStyle: 'italic' },
+    studyCard: {
+      backgroundColor: C.card,
+      borderColor: C.cardBorder,
+      borderWidth: 1,
+      borderRadius: Radius.lg,
+      padding: Spacing.lg,
+      gap: Spacing.md,
+      marginTop: Spacing.xs,
+    },
+    studyHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.md,
+    },
+    studyIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: Radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    studyTitleWrap: {
+      flex: 1,
+      gap: 2,
+    },
+    studyTitle: {
+      fontSize: FontSize.md,
+      fontWeight: '700',
+      color: C.text,
+    },
+    studySubtitle: {
+      fontSize: FontSize.xs,
+      color: C.muted,
+    },
+    studyDesc: {
+      fontSize: FontSize.sm,
+      color: C.textSecondary,
+      lineHeight: 20,
+    },
     statsRow: { flexDirection: 'row', gap: Spacing.sm },
     statCard: { flex: 1, alignItems: 'center', gap: 5, backgroundColor: C.card, borderRadius: Radius.lg, padding: Spacing.md },
     statIconWrap: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
@@ -339,6 +380,29 @@ export default function DashboardPage() {
               </Text>
             </View>
           </View>
+
+          {/* Study Materials card */}
+          <Pressable
+            onPress={() => router.push('/(app)/study-materials' as any)}
+            style={({ pressed }) => [
+              styles.studyCard,
+              pressed && { opacity: 0.88, transform: [{ scale: 0.995 }] }
+            ]}
+          >
+            <View style={styles.studyHeader}>
+              <View style={[styles.studyIconWrap, { backgroundColor: `${C.accent}14` }]}>
+                <Brain size={18} color={C.accent} />
+              </View>
+              <View style={styles.studyTitleWrap}>
+                <Text style={styles.studyTitle}>Study Materials</Text>
+                <Text style={styles.studySubtitle}>Active Recall & Retention</Text>
+              </View>
+              <ChevronRight size={18} color={C.muted} />
+            </View>
+            <Text style={styles.studyDesc}>
+              Generate interactive flashcards and multiple-choice quizzes from your uploaded documents to boost your study efficiency.
+            </Text>
+          </Pressable>
 
           {/* Stats row */}
           <View style={styles.statsRow}>
