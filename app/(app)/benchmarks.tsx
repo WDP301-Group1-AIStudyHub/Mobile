@@ -18,7 +18,6 @@ import {
   Play,
   Trophy,
   FlaskConical,
-  TrendingUp,
   Award,
   X,
 } from 'lucide-react-native'
@@ -33,6 +32,7 @@ import {
   runBenchmarkQuestion,
   type BenchmarkQuestion as ApiQuestion,
   type BenchmarkDifficulty,
+  type BenchmarkRunResult,
   type BenchmarkSummary,
 } from '../../services/benchmarkApi'
 
@@ -42,25 +42,17 @@ const DIFFICULTIES: Difficulty[] = ['Easy', 'Medium', 'Hard']
 
 const EMPTY_SUMMARY: BenchmarkSummary = {
   totalRuns: 0,
-  basicAvg: 0,
-  correctiveAvg: 0,
-  correctiveWinRate: 0,
-  basicWinRate: 0,
-  tieRate: 0,
-  faithfulnessImprovement: '0%',
-  correctnessImprovement: '0%',
+  averageScore: 0,
+  averageAnswerCorrectness: 0,
+  averageFaithfulness: 0,
+  averageRelevance: 0,
+  averageCompleteness: 0,
 }
 
 function difficultyColor(d: Difficulty, C: ReturnType<typeof useColors>): string {
   if (d === 'Easy') return C.success
   if (d === 'Medium') return C.warning
   return C.error
-}
-
-function winnerLabel(w: ApiQuestion['winner']) {
-  if (w === 'corrective') return 'Corrective'
-  if (w === 'basic') return 'Basic'
-  return 'Tie'
 }
 
 function timeAgo(iso?: string): string {
@@ -76,13 +68,17 @@ function timeAgo(iso?: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+function scorePercent(value: number): number {
+  return Math.round((value > 1 ? value : value * 100))
+}
+
 // Page description
 function PageDescription() {
   const C = useColors()
   return (
     <View style={{ marginBottom: Spacing.lg, paddingHorizontal: Spacing.xs }}>
       <Text style={{ fontSize: FontSize.sm, color: C.textSecondary, lineHeight: 22 }}>
-        Compare answer quality between Basic RAG and Corrective RAG. Benchmarks help evaluate the accuracy and reliability of AI answers.
+        Evaluate DR-RAG correctness, faithfulness, relevance, and completeness against expected answers.
       </Text>
     </View>
   )
@@ -94,6 +90,7 @@ export default function BenchmarksPage() {
   const [runningId, setRunningId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [questions, setQuestions] = useState<ApiQuestion[]>([])
+  const [results, setResults] = useState<Record<string, BenchmarkRunResult>>({})
   const [summary, setSummary] = useState<BenchmarkSummary>(EMPTY_SUMMARY)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -139,8 +136,10 @@ export default function BenchmarksPage() {
   async function handleRun(id: string) {
     setRunningId(id)
     try {
-      const updated = await runBenchmarkQuestion(id)
-      if (isMountedRef.current) setQuestions((prev) => prev.map((q) => (q.id === id ? updated : q)))
+      const result = await runBenchmarkQuestion(id)
+      if (isMountedRef.current) {
+        setResults((current) => ({ ...current, [id]: result }))
+      }
       const sm = await getBenchmarkSummary()
       if (isMountedRef.current) setSummary(sm)
     } catch (e) {
@@ -152,8 +151,8 @@ export default function BenchmarksPage() {
   }
 
   async function handleCreate() {
-    if (!form.question.trim() || !form.subject.trim()) {
-      Alert.alert('Validation', 'Question and subject are required.')
+    if (!form.question.trim() || !form.subject.trim() || !form.expectedAnswer.trim()) {
+      Alert.alert('Validation', 'Question, subject, and expected answer are required.')
       return
     }
     setCreating(true)
@@ -161,7 +160,7 @@ export default function BenchmarksPage() {
       const created = await createBenchmarkQuestion({
         question: form.question.trim(),
         subject: form.subject.trim(),
-        expectedAnswer: form.expectedAnswer.trim() || undefined,
+        expectedAnswer: form.expectedAnswer.trim(),
         difficulty: form.difficulty,
       })
       setQuestions((prev) => [created, ...prev])
@@ -176,9 +175,9 @@ export default function BenchmarksPage() {
   }
 
   const styles = useMemo(() => StyleSheet.create({
-    safe: { flex: 1 },
+    safe: { flex: 1, backgroundColor: C.background },
     scroll: { flex: 1 },
-    content: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 24, gap: Spacing.lg },
+    content: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 96, gap: Spacing.lg },
     topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     topBarRight: { flexDirection: 'row', gap: Spacing.sm },
     headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
@@ -336,9 +335,9 @@ export default function BenchmarksPage() {
         <View style={styles.statsGrid}>
           {[
             { icon: FlaskConical, label: 'Total Runs', value: `${s.totalRuns}`, color: C.primary, bg: C.primaryDim },
-            { icon: BarChart2, label: 'Basic Avg', value: `${s.basicAvg}%`, color: C.info, bg: C.infoDim },
-            { icon: BarChart2, label: 'Corrective Avg', value: `${s.correctiveAvg}%`, color: C.accent, bg: C.accentDim },
-            { icon: Trophy, label: 'Corrective Wins', value: `${s.correctiveWinRate}%`, color: C.accentGold, bg: C.warningDim },
+            { icon: BarChart2, label: 'Average Score', value: `${scorePercent(s.averageScore)}%`, color: C.info, bg: C.infoDim },
+            { icon: Award, label: 'Correctness', value: `${scorePercent(s.averageAnswerCorrectness)}%`, color: C.accent, bg: C.accentDim },
+            { icon: Trophy, label: 'Faithfulness', value: `${scorePercent(s.averageFaithfulness)}%`, color: C.accentGold, bg: C.warningDim },
           ].map(st => (
             <View key={st.label} style={styles.statCard}>
               <View style={styles.statIconRow}>
@@ -355,64 +354,19 @@ export default function BenchmarksPage() {
         <View style={styles.compBanner}>
           <View style={styles.compHeader}>
             <BarChart2 size={16} color={C.primary} />
-            <Text style={styles.compHeaderText}>Basic vs Corrective RAG</Text>
+            <Text style={styles.compHeaderText}>DR-RAG quality metrics</Text>
           </View>
           <View style={styles.compRow}>
             <View style={[styles.compCol, { borderColor: `${C.info}40`, backgroundColor: C.infoDim }]}>
-              <Text style={[styles.compColTitle, { color: C.info }]}>Basic RAG</Text>
-              <Text style={[styles.compScore, { color: C.info }]}>{s.basicAvg}</Text>
-              <Text style={styles.compLabel}>avg score</Text>
-              <Text style={[styles.compLabel, { color: C.info }]}>{s.basicWinRate}% wins</Text>
+              <Text style={[styles.compColTitle, { color: C.info }]}>Relevance</Text>
+              <Text style={[styles.compScore, { color: C.info }]}>{scorePercent(s.averageRelevance)}%</Text>
+              <Text style={styles.compLabel}>retrieval and answer fit</Text>
             </View>
-            <Text style={styles.vsText}>VS</Text>
             <View style={[styles.compCol, { borderColor: `${C.accent}40`, backgroundColor: C.accentDim }]}>
-              <Text style={[styles.compColTitle, { color: C.accent }]}>Corrective RAG</Text>
-              <Text style={[styles.compScore, { color: C.accent }]}>{s.correctiveAvg}</Text>
-              <Text style={styles.compLabel}>avg score</Text>
-              <View style={styles.winnerBadge}>
-                <Text style={styles.winnerBadgeText}>{s.correctiveWinRate}% wins</Text>
-              </View>
+              <Text style={[styles.compColTitle, { color: C.accent }]}>Completeness</Text>
+              <Text style={[styles.compScore, { color: C.accent }]}>{scorePercent(s.averageCompleteness)}%</Text>
+              <Text style={styles.compLabel}>expected answer coverage</Text>
             </View>
-          </View>
-          <View style={styles.improvRow}>
-            <View style={styles.improvPill}>
-              <TrendingUp size={13} color={C.success} />
-              <View>
-                <Text style={styles.improvText}>{s.faithfulnessImprovement}</Text>
-                <Text style={styles.improvLabel}>Faithfulness</Text>
-              </View>
-            </View>
-            <View style={styles.improvPill}>
-              <Award size={13} color={C.success} />
-              <View>
-                <Text style={styles.improvText}>{s.correctnessImprovement}</Text>
-                <Text style={styles.improvLabel}>Correctness</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.qCard}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Award size={15} color={C.accentGold} />
-            <Text style={styles.sectionTitle}>Win Rate Distribution</Text>
-          </View>
-          <View style={{ flexDirection: 'row', height: 10, borderRadius: Radius.full, overflow: 'hidden', gap: 2 }}>
-            <View style={{ flex: Math.max(0.01, s.correctiveWinRate), backgroundColor: C.accent, borderRadius: Radius.full }} />
-            <View style={{ flex: Math.max(0.01, s.basicWinRate), backgroundColor: C.info, borderRadius: Radius.full }} />
-            <View style={{ flex: Math.max(0.01, s.tieRate), backgroundColor: C.cardBorder, borderRadius: Radius.full }} />
-          </View>
-          <View style={{ flexDirection: 'row', gap: Spacing.md }}>
-            {[
-              { color: C.accent, label: `Corrective ${s.correctiveWinRate}%` },
-              { color: C.info, label: `Basic ${s.basicWinRate}%` },
-              { color: C.muted, label: `Tie ${s.tieRate}%` },
-            ].map(l => (
-              <View key={l.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: l.color }} />
-                <Text style={{ fontSize: FontSize.xs, color: C.muted }}>{l.label}</Text>
-              </View>
-            ))}
           </View>
         </View>
       </>
@@ -436,7 +390,7 @@ export default function BenchmarksPage() {
       <View style={{ gap: Spacing.sm }}>
         {questions.map(q => {
           const isRunning = runningId === q.id
-          const hasScore = q.hasResult && q.basicScore !== null && q.correctiveScore !== null
+          const result = results[q.id]
           return (
             <View key={q.id} style={styles.qCard}>
               <View style={styles.qTop}>
@@ -457,22 +411,19 @@ export default function BenchmarksPage() {
                 <Text style={{ fontSize: FontSize.xs, color: C.muted }}>{timeAgo(q.createdAt)}</Text>
               </View>
 
-              {hasScore ? (
+              {result ? (
                 <View style={styles.qResultRow}>
                   <View style={[styles.scoreBox, { borderColor: `${C.info}40`, backgroundColor: C.infoDim }]}>
-                    <Text style={[styles.scoreMode, { color: C.info }]}>Basic</Text>
-                    <Text style={[styles.scoreNum, { color: C.info }]}>{q.basicScore}</Text>
+                    <Text style={[styles.scoreMode, { color: C.info }]}>Overall</Text>
+                    <Text style={[styles.scoreNum, { color: C.info }]}>{scorePercent(result.evaluation.overallScore)}%</Text>
                   </View>
-                  <Text style={{ fontSize: FontSize.xs, color: C.muted, fontWeight: '700' }}>VS</Text>
                   <View style={[styles.scoreBox, { borderColor: `${C.accent}40`, backgroundColor: C.accentDim }]}>
-                    <Text style={[styles.scoreMode, { color: C.accent }]}>Corrective</Text>
-                    <Text style={[styles.scoreNum, { color: C.accent }]}>{q.correctiveScore}</Text>
+                    <Text style={[styles.scoreMode, { color: C.accent }]}>Faithfulness</Text>
+                    <Text style={[styles.scoreNum, { color: C.accent }]}>{scorePercent(result.evaluation.faithfulness)}%</Text>
                   </View>
-                  <View style={[styles.winnerPill, {
-                    backgroundColor: q.winner === 'corrective' ? C.accent : q.winner === 'basic' ? C.info : C.muted
-                  }]}>
+                  <View style={styles.winnerPill}>
                     <Trophy size={11} color="#fff" />
-                    <Text style={styles.winnerText}>{winnerLabel(q.winner)}</Text>
+                    <Text style={styles.winnerText}>DR-RAG</Text>
                   </View>
                 </View>
               ) : (
@@ -525,7 +476,7 @@ export default function BenchmarksPage() {
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.pageTitle}>Benchmarks</Text>
-              <Text style={styles.pageSub}>Compare Basic RAG vs Corrective RAG quality</Text>
+              <Text style={styles.pageSub}>Measure DR-RAG answer quality against expected answers</Text>
             </View>
             <Pressable style={styles.addBtn} onPress={() => setShowCreate(true)}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -593,7 +544,7 @@ export default function BenchmarksPage() {
             </View>
 
             <View>
-              <Text style={styles.inputLabel}>Expected Answer</Text>
+              <Text style={styles.inputLabel}>Expected Answer *</Text>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
                 placeholder="Describe the expected answer for scoring..."

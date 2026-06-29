@@ -140,7 +140,7 @@ export default function AdminLayout() {
 
   if (state.status !== 'authenticated') {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' }}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.background }}>
         <ActivityIndicator size="large" color={C.primary} />
       </View>
     )
@@ -149,7 +149,7 @@ export default function AdminLayout() {
   return (
     <Tabs
       screenOptions={{
-        sceneStyle: { backgroundColor: 'transparent' },
+        sceneStyle: { backgroundColor: C.background },
         headerShown: true,
         header: () => <AdminHeader />,
         tabBarStyle: styles.tabBar,

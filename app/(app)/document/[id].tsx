@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   Linking
 } from 'react-native'
@@ -29,14 +32,36 @@ import {
   ChevronDown,
   ChevronRight,
   AlignLeft,
-  ExternalLink
+  ExternalLink,
+  Edit2,
+  Trash2,
+  X,
+  Check,
 } from 'lucide-react-native'
 import Card from '../../../components/ui/Card'
 import ThemeToggle from '../../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../../constants/colors'
 import { useColors } from '../../../contexts/ThemeContext'
-import { getDocument } from '../../../services/documentApi'
-import type { DocumentItem } from '../../../types/document'
+import { deleteDocument, getDocument, updateDocument } from '../../../services/documentApi'
+import { listSubjects } from '../../../services/subjectApi'
+import type { DocumentItem, DocumentVisibility } from '../../../types/document'
+import type { SubjectItem } from '../../../types/subject'
+
+const getSafeId = (item: unknown): string => {
+  if (!item || typeof item !== 'object') return ''
+  const obj = item as { _id?: string; id?: string }
+  return obj._id?.toString() || obj.id?.toString() || ''
+}
+
+function getSubjectName(subject: unknown, fallback = 'Uncategorized'): string {
+  if (!subject) return fallback
+  if (typeof subject === 'string') return subject || fallback
+  if (typeof subject === 'object') {
+    const name = (subject as Record<string, unknown>).name
+    if (typeof name === 'string' && name.length > 0) return name
+  }
+  return fallback
+}
 
 function formatBytes(bytes: number): string {
   if (!bytes || bytes < 1024) return `${bytes || 0} B`
@@ -74,7 +99,7 @@ function formatDate(date: string | undefined): string {
 // ─── Module-level styles ───────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  container: { padding: Spacing.lg, paddingBottom: Spacing.xl, gap: Spacing.md },
+  container: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 96, gap: Spacing.md },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -84,6 +109,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
   backBtn: {
     width: 40,
@@ -227,6 +265,104 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 14, 26, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: Spacing.lg,
+    paddingBottom: 40,
+    maxHeight: '88%',
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    marginBottom: Spacing.sm,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+  },
+  sheetTitle: { fontSize: FontSize.lg, fontWeight: '800' },
+  label: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    marginTop: Spacing.md,
+    marginBottom: 6,
+  },
+  required: { color: '#EF4444' },
+  input: {
+    height: 50,
+    borderWidth: 1.5,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.md,
+    fontSize: FontSize.base,
+  },
+  inputArea: {
+    height: 90,
+    paddingTop: Spacing.sm,
+    textAlignVertical: 'top',
+  },
+  pickerTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    height: 50,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+    paddingHorizontal: Spacing.md,
+  },
+  pickerSelected: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pickerDot: { width: 10, height: 10, borderRadius: 5 },
+  pickerInfo: { flex: 1 },
+  pickerName: { fontSize: FontSize.sm, fontWeight: '600' },
+  pickerCode: { fontSize: FontSize.xs, marginTop: 1 },
+  pickerPlaceholder: { fontSize: FontSize.sm },
+  visRow: { flexDirection: 'row', gap: Spacing.sm },
+  visBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+  },
+  visText: { fontSize: FontSize.sm, fontWeight: '600' },
+  submitBtn: {
+    marginTop: Spacing.lg,
+    paddingVertical: 14,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  submitText: { color: '#fff', fontSize: FontSize.base, fontWeight: '700' },
+  subjectOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+    marginBottom: Spacing.sm,
+  },
+  subjectIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 })
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
@@ -234,14 +370,26 @@ export default function DocumentDetailsPage() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const C = useColors()
   const [doc, setDoc] = useState<DocumentItem | null>(null)
+  const [subjects, setSubjects] = useState<SubjectItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [showEdit, setShowEdit] = useState(false)
+  const [showSubjectPicker, setShowSubjectPicker] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [editVisibility, setEditVisibility] = useState<DocumentVisibility>('PRIVATE')
+  const [editSubject, setEditSubject] = useState<SubjectItem | null>(null)
 
   useEffect(() => {
     let cancelled = false
     const loadDoc = async () => {
       try {
-        const data = await getDocument(id)
+        const [data, subjectList] = await Promise.all([
+          getDocument(id),
+          listSubjects().catch(() => []),
+        ])
         if (!cancelled) setDoc(data)
+        if (!cancelled) setSubjects(Array.isArray(subjectList) ? subjectList : [])
       } catch (e) {
         if (!cancelled) router.back()
       } finally {
@@ -271,18 +419,7 @@ export default function DocumentDetailsPage() {
   const isPublic = doc.visibility === 'PUBLIC'
   const contentLength = doc.extractedText?.length || 0
 
-  // doc.subject can be: string, populated object {_id, name, ...}, or undefined
-  const subjectName: string = (() => {
-    const s = doc.subject as unknown
-    if (!s) return 'Uncategorized'
-    if (typeof s === 'string') return s
-    if (typeof s === 'object' && s !== null) {
-      const obj = s as Record<string, unknown>
-      const n = obj.name
-      if (typeof n === 'string' && n.length > 0) return n
-    }
-    return 'Uncategorized'
-  })()
+  const subjectName = getSubjectName(doc.subject)
 
   // doc.uploadedBy can be: string, populated object {_id, name, email, ...}, or undefined
   const uploaderName: string = (() => {
@@ -296,6 +433,59 @@ export default function DocumentDetailsPage() {
     }
     return doc.metadata?.author || 'Unknown'
   })()
+
+  const openEdit = () => {
+    const subject = subjects.find((s) => getSafeId(s) === doc.subjectId)
+      ?? subjects.find((s) => s.name === subjectName)
+      ?? null
+    setEditTitle(doc.title)
+    setEditDesc(doc.description ?? '')
+    setEditVisibility(doc.visibility ?? 'PRIVATE')
+    setEditSubject(subject)
+    setShowEdit(true)
+  }
+
+  const submitEdit = async () => {
+    if (!editTitle.trim()) {
+      Alert.alert('Missing title', 'Please enter a document title.')
+      return
+    }
+    setSavingEdit(true)
+    try {
+      const updated = await updateDocument(id, {
+        title: editTitle.trim(),
+        description: editDesc.trim() || undefined,
+        subjectId: editSubject ? getSafeId(editSubject) : undefined,
+        visibility: editVisibility,
+      })
+      setDoc(updated)
+      setShowEdit(false)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not update document.'
+      Alert.alert('Update failed', msg)
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const confirmDelete = () => {
+    Alert.alert('Delete Document', `Delete "${doc.title}"? This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteDocument(id)
+            router.replace('/(app)/documents')
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Could not delete document.'
+            Alert.alert('Delete failed', msg)
+          }
+        },
+      },
+    ])
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -311,7 +501,21 @@ export default function DocumentDetailsPage() {
               </Pressable>
               <Text style={[styles.titleText, { color: C.text }]}>Details</Text>
             </View>
-            <ThemeToggle size={38} />
+            <View style={styles.headerActions}>
+              <Pressable
+                style={[styles.headerIconBtn, { backgroundColor: C.primaryDim, borderColor: C.primary }]}
+                onPress={openEdit}
+              >
+                <Edit2 size={17} color={C.primary} />
+              </Pressable>
+              <Pressable
+                style={[styles.headerIconBtn, { backgroundColor: C.errorDim, borderColor: C.error }]}
+                onPress={confirmDelete}
+              >
+                <Trash2 size={17} color={C.error} />
+              </Pressable>
+              <ThemeToggle size={38} />
+            </View>
           </View>
 
           {/* Details Card */}
@@ -515,6 +719,165 @@ export default function DocumentDetailsPage() {
             </Pressable>
           </View>
         </ScrollView>
+
+        <Modal
+          visible={showEdit}
+          transparent
+          animationType="slide"
+          onRequestClose={() => !savingEdit && setShowEdit(false)}
+        >
+          <Pressable style={styles.overlay} onPress={() => !savingEdit && setShowEdit(false)}>
+            <Pressable style={[styles.sheet, { backgroundColor: C.card }]} onPress={() => {}}>
+              <View style={[styles.sheetHandle, { backgroundColor: C.cardBorder }]} />
+              <View style={styles.sheetHeader}>
+                <Text style={[styles.sheetTitle, { color: C.text }]}>Edit Document</Text>
+                <Pressable onPress={() => setShowEdit(false)} hitSlop={8} disabled={savingEdit}>
+                  <X size={20} color={C.muted} />
+                </Pressable>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <Text style={[styles.label, { color: C.textSecondary }]}>
+                  Title <Text style={styles.required}>*</Text>
+                </Text>
+                <TextInput
+                  value={editTitle}
+                  onChangeText={setEditTitle}
+                  placeholder="Document title"
+                  placeholderTextColor={C.muted}
+                  editable={!savingEdit}
+                  style={[styles.input, { backgroundColor: C.cardElevated, borderColor: C.cardBorder, color: C.text }]}
+                />
+
+                <Text style={[styles.label, { color: C.textSecondary }]}>Subject</Text>
+                <Pressable
+                  onPress={() => setShowSubjectPicker(true)}
+                  disabled={savingEdit}
+                  style={({ pressed }) => [
+                    styles.pickerTrigger,
+                    { backgroundColor: C.cardElevated, borderColor: C.cardBorder },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                >
+                  {editSubject ? (
+                    <View style={styles.pickerSelected}>
+                      <View style={[styles.pickerDot, { backgroundColor: editSubject.color ?? C.primary }]} />
+                      <View style={styles.pickerInfo}>
+                        <Text style={[styles.pickerName, { color: C.text }]} numberOfLines={1}>
+                          {editSubject.name}
+                        </Text>
+                        {editSubject.code ? (
+                          <Text style={[styles.pickerCode, { color: C.muted }]}>{editSubject.code}</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.pickerSelected}>
+                      <BookOpen size={16} color={C.muted} />
+                      <Text style={[styles.pickerPlaceholder, { color: C.muted }]}>Unassigned</Text>
+                    </View>
+                  )}
+                  <ChevronDown size={18} color={C.muted} />
+                </Pressable>
+
+                <Text style={[styles.label, { color: C.textSecondary }]}>Description</Text>
+                <TextInput
+                  value={editDesc}
+                  onChangeText={setEditDesc}
+                  placeholder="Optional description"
+                  placeholderTextColor={C.muted}
+                  multiline
+                  editable={!savingEdit}
+                  style={[styles.input, styles.inputArea, { backgroundColor: C.cardElevated, borderColor: C.cardBorder, color: C.text }]}
+                />
+
+
+
+                <Pressable
+                  onPress={submitEdit}
+                  disabled={savingEdit}
+                  style={({ pressed }) => [
+                    styles.submitBtn,
+                    { backgroundColor: C.primary },
+                    (pressed || savingEdit) && { opacity: 0.6 },
+                  ]}
+                >
+                  {savingEdit ? <ActivityIndicator color="#fff" /> : <Edit2 size={16} color="#fff" />}
+                  <Text style={styles.submitText}>{savingEdit ? 'Saving...' : 'Save changes'}</Text>
+                </Pressable>
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        <Modal
+          visible={showSubjectPicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowSubjectPicker(false)}
+        >
+          <Pressable style={styles.overlay} onPress={() => setShowSubjectPicker(false)}>
+            <Pressable style={[styles.sheet, { backgroundColor: C.card }]} onPress={() => {}}>
+              <View style={[styles.sheetHandle, { backgroundColor: C.cardBorder }]} />
+              <View style={styles.sheetHeader}>
+                <Text style={[styles.sheetTitle, { color: C.text }]}>Select Subject</Text>
+                <Pressable onPress={() => setShowSubjectPicker(false)} hitSlop={8}>
+                  <X size={20} color={C.muted} />
+                </Pressable>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <Pressable
+                  onPress={() => {
+                    setEditSubject(null)
+                    setShowSubjectPicker(false)
+                  }}
+                  style={({ pressed }) => [
+                    styles.subjectOption,
+                    { backgroundColor: !editSubject ? C.primaryDim : C.cardElevated, borderColor: !editSubject ? C.primary : C.cardBorder },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                >
+                  <View style={[styles.subjectIcon, { backgroundColor: C.cardElevated }]}>
+                    <FileText size={18} color={C.muted} />
+                  </View>
+                  <Text style={[styles.pickerName, { color: C.text, flex: 1 }]}>Unassigned</Text>
+                  {!editSubject ? <Check size={18} color={C.primary} /> : null}
+                </Pressable>
+
+                {subjects.map((s, index) => {
+                  const sId = getSafeId(s)
+                  const active = !!editSubject && getSafeId(editSubject) === sId
+                  return (
+                    <Pressable
+                      key={sId || `subject-${index}`}
+                      onPress={() => {
+                        setEditSubject(s)
+                        setShowSubjectPicker(false)
+                      }}
+                      style={({ pressed }) => [
+                        styles.subjectOption,
+                        { backgroundColor: active ? C.primaryDim : C.cardElevated, borderColor: active ? C.primary : C.cardBorder },
+                        pressed && { opacity: 0.6 },
+                      ]}
+                    >
+                      <View style={[styles.subjectIcon, { backgroundColor: C.primaryDim }]}>
+                        <BookOpen size={18} color={C.primary} />
+                      </View>
+                      <View style={styles.pickerInfo}>
+                        <Text style={[styles.pickerName, { color: C.text }]} numberOfLines={1}>
+                          {s.name}
+                        </Text>
+                        {s.code ? <Text style={[styles.pickerCode, { color: C.muted }]}>{s.code}</Text> : null}
+                      </View>
+                      {active ? <Check size={18} color={C.primary} /> : null}
+                    </Pressable>
+                  )
+                })}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </SafeAreaView>
   )
 }

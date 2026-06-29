@@ -32,8 +32,12 @@ export interface ChatSource {
 
 export interface AskPayload {
   question: string
+  threadId?: string
   documentId?: string
+  documentIds?: string[]
   subject?: string
+  subjectId?: string
+  scope?: string
   mode?: RagMode
 }
 
@@ -41,6 +45,7 @@ export interface AskPayload {
 
 export interface AskResponse {
   answer: string
+  threadId?: string
   mode?: RagMode
   originalQuestion?: string
   rewrittenQuery?: string

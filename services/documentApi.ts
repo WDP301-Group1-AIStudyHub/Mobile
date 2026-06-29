@@ -47,10 +47,11 @@ function trimDoc(doc: DocumentItem): DocumentItem {
 
 export async function listDocuments(filter?: DocumentFilter): Promise<DocumentsResponse> {
   const params = new URLSearchParams()
-  if (filter?.search) params.append('search', filter.search)
+  if (filter?.search) params.append('keyword', filter.search)
   if (filter?.visibility) params.append('visibility', filter.visibility)
-  if (filter?.subject) params.append('subject', filter.subject)
+  if (filter?.subject) params.append('subjectId', filter.subject)
   if (filter?.status) params.append('status', filter.status)
+  params.append('limit', '100')
 
   const { data } = await apiClient.get<ApiResponse<{ documents: DocumentItem[]; total: number }>>(
     `/api/documents?${params.toString()}`
@@ -131,7 +132,17 @@ export async function updateDocument(
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  await apiClient.delete(`/api/documents/${id}`)
+  try {
+    await apiClient.delete(`/api/documents/${id}`)
+  } catch (error: any) {
+    let errorMessage = 'Delete failed'
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    throw new Error(errorMessage)
+  }
 }
 
 export async function updateDocumentVersion(

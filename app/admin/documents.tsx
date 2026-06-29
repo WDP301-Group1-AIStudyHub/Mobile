@@ -86,8 +86,8 @@ export default function DocumentsPage() {
   }
 
   const styles = useMemo(() => StyleSheet.create({
-    safe: { flex: 1 },
-    content: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 40, gap: Spacing.md },
+    safe: { flex: 1, backgroundColor: C.background },
+    content: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 96, gap: Spacing.md },
     pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
     pageSubtitle: { fontSize: FontSize.sm, color: C.muted, lineHeight: 20 },
     searchWrap: {
