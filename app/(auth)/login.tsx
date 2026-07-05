@@ -11,7 +11,6 @@ import {
 import { router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react-native'
-import VideoBg from '../../components/ui/VideoBg'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import BrandLogo from '../../components/ui/BrandLogo'
@@ -34,8 +33,12 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login({ email: form.email, password: form.password })
-      router.replace('/(app)/dashboard')
+      const user = await login({ email: form.email, password: form.password })
+      if (user.role === 'admin') {
+        router.replace('/admin')
+      } else {
+        router.replace('/(app)/dashboard')
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to sign in.')
     } finally {
@@ -149,9 +152,8 @@ export default function LoginPage() {
 }), [C])
 
   return (
-    <VideoBg veil="strong">
-      <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
@@ -237,6 +239,5 @@ export default function LoginPage() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </VideoBg>
   )
 }

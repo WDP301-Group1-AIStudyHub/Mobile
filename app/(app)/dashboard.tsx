@@ -1,54 +1,147 @@
-﻿import { useMemo } from 'react'
-import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ScrollView, StyleSheet, Text, View, Pressable, RefreshControl } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import {
   Archive,
   Bell,
   BookOpen,
+  Brain,
+  ChevronRight,
   Database,
   FileText,
   MessageCircle,
   Sparkles,
   UploadCloud,
 } from 'lucide-react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import VideoBg from '../../components/ui/VideoBg'
 import Card from '../../components/ui/Card'
 import BrandLogo from '../../components/ui/BrandLogo'
 import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
+import { listDocuments } from '../../services/documentApi'
+import { listSubjects } from '../../services/subjectApi'
+import type { DocumentItem } from '../../types/document'
+import type { SubjectItem } from '../../types/subject'
 
-const recentFiles = [
-  { name: 'Quantum Entanglement Patterns.pdf', modified: '2h ago', subject: 'Physics', type: 'pdf' },
-  { name: 'Neural Network Topologies.epub', modified: '5h ago', subject: 'AI Research', type: 'epub' },
-  { name: 'Global Economic Shifts 2025.pdf', modified: 'Yesterday', subject: 'Economics', type: 'pdf' },
-  { name: 'Metaphysics of Digital Reality.docx', modified: '2 days ago', subject: 'Philosophy', type: 'docx' },
-]
+const STORAGE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024 // 10 GB
+
+function formatBytes(bytes: number): string {
+  if (!bytes) return '0.00 GB'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+function timeAgo(isoDate: string | undefined): string {
+  if (!isoDate) return 'recently'
+  const diff = Date.now() - new Date(isoDate).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(isoDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function fileTypeColor(type: string | undefined, C: ReturnType<typeof useColors>): string {
+  if (!type) return C.muted
+  if (type.includes('pdf')) return C.error
+  if (type.includes('epub')) return C.secondary
+  if (type.includes('word') || type.includes('docx')) return C.info
+  return C.muted
+}
+
+function fileTypeKey(type: string | undefined): string {
+  if (!type) return 'file'
+  if (type.includes('pdf')) return 'pdf'
+  if (type.includes('epub')) return 'epub'
+  if (type.includes('word') || type.includes('docx')) return 'docx'
+  return 'file'
+}
+
+// Backend may return `subject` as either a string, a populated object
+// ({_id, name, description, color, code}), or null/undefined.
+// RN throws "Objects are not valid as a React child" if we render the object.
+function getSubjectName(subject: unknown, fallback = 'Uncategorized'): string {
+  if (subject == null) return fallback
+  if (typeof subject === 'string') return subject.length > 0 ? subject : fallback
+  if (typeof subject === 'object') {
+    const n = (subject as Record<string, unknown>).name
+    if (typeof n === 'string' && n.length > 0) return n
+  }
+  return fallback
+}
 
 export default function DashboardPage() {
   const C = useColors()
+  const [docs, setDocs] = useState<DocumentItem[]>([])
+  const [subjects, setSubjects] = useState<SubjectItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
-  const subjects = useMemo(() => [
-    { name: 'Theoretical Physics', count: 124, color: C.primary },
-    { name: 'Neural Engineering', count: 89, color: C.accentTeal },
-    { name: 'Ethics in AI', count: 56, color: C.accent },
-    { name: 'Astro-Biology', count: 42, color: C.accentGold },
-  ], [C])
+  const load = useCallback(async () => {
+    try {
+      const [docsRes, subsRes] = await Promise.all([
+        listDocuments(),
+        listSubjects().catch(() => [] as SubjectItem[]),
+      ])
+      setDocs(Array.isArray(docsRes) ? docsRes : [])
+      setSubjects(Array.isArray(subsRes) ? subsRes : [])
+    } catch (err: any) {
+      // 401 means the auth token is missing or invalid — auth guard will redirect.
+      // Don't spam logs in that case; only log real network/parsing errors.
+      const is401 = err?.response?.status === 401
+      if (!is401) {
+        console.error('[dashboard] load error', err)
+      }
+      setDocs([])
+      setSubjects([])
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [])
 
-  const stats = useMemo(() => [
-    { label: 'Documents', value: '342', icon: Database, color: C.primary, bg: C.primaryDim },
-    { label: 'Chats', value: '18', icon: MessageCircle, color: C.accentTeal, bg: `${C.accentTeal}18` },
-    { label: 'Subjects', value: '12', icon: Archive, color: C.accent, bg: `${C.accent}18` },
-  ], [C])
+  useEffect(() => {
+    load()
+  }, [load])
 
-  function fileTypeColor(type: string): string {
-    if (type === 'pdf') return C.error
-    if (type === 'epub') return C.secondary
-    if (type === 'docx') return C.info
-    return C.muted
-  }
+  const totalBytes = useMemo(
+    () => docs.reduce((sum, d) => sum + (d.fileSize || 0), 0),
+    [docs]
+  )
+
+  const recentDocs = useMemo(
+    () => [...docs].sort((a, b) => +new Date(b.updatedAt || 0) - +new Date(a.updatedAt || 0)).slice(0, 4),
+    [docs]
+  )
+
+  const subjectsWithCount = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const d of docs) {
+      const key = d.subjectId || getSubjectName(d.subject, '') || 'Uncategorized'
+      counts.set(key, (counts.get(key) || 0) + 1)
+    }
+    return subjects
+      .map((s) => ({ ...s, count: counts.get(s.id) || counts.get(s.name) || 0 }))
+      .filter((s) => s.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 4)
+  }, [subjects, docs])
+
+  const storagePct = Math.min(100, (totalBytes / STORAGE_LIMIT_BYTES) * 100)
+
+  const stats = useMemo(
+    () => [
+      { label: 'Documents', value: String(docs.length), icon: Database, color: C.primary, bg: C.primaryDim },
+      { label: 'Subjects', value: String(subjects.length), icon: Archive, color: C.accent, bg: C.accentDim },
+    ],
+    [docs.length, subjects.length, C]
+  )
 
   const styles = useMemo(() => StyleSheet.create({
     safe: { flex: 1 },
@@ -60,8 +153,6 @@ export default function DashboardPage() {
       width: 38, height: 38, borderRadius: 12,
       backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder,
       alignItems: 'center', justifyContent: 'center',
-      shadowColor: C.cardShadowColor, shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
     },
     pageHeader: { gap: 4 },
     pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
@@ -70,59 +161,86 @@ export default function DashboardPage() {
       backgroundColor: C.card, borderRadius: Radius.lg, borderWidth: 1,
       borderColor: C.cardBorder, padding: Spacing.lg, gap: Spacing.sm,
       borderLeftWidth: 3, borderLeftColor: C.accentTeal,
-      shadowColor: C.cardShadowColor, shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.08, shadowRadius: 14, elevation: 3,
     },
     storageTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     storageIconBadge: {
       width: 36, height: 36, borderRadius: 10,
-      backgroundColor: `${C.accentTeal}18`,
+      backgroundColor: C.accentTealDim,
       alignItems: 'center', justifyContent: 'center',
     },
     storageLabel: { fontSize: FontSize.xs, fontWeight: '700', color: C.muted, letterSpacing: 1.5 },
     storageValue: { fontSize: FontSize.xxxl, fontWeight: '300', color: C.text, letterSpacing: -1, marginTop: Spacing.lg },
     storageCaption: { fontSize: FontSize.xs, color: C.muted, marginTop: 2 },
     storageBarTrack: { height: 4, borderRadius: 2, backgroundColor: C.cardBorder, marginTop: Spacing.md, overflow: 'hidden' },
-    storageBarFill: { height: 4, borderRadius: 2, backgroundColor: C.accentTeal, width: '3.2%' },
+    storageBarFill: { height: 4, borderRadius: 2, backgroundColor: C.accentTeal, width: `${storagePct}%` },
     aiCard: {
-      borderRadius: Radius.lg, overflow: 'hidden',
-      shadowColor: C.primary, shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.22, shadowRadius: 18, elevation: 8,
-    },
-    aiGrad: { padding: Spacing.lg, gap: Spacing.md, borderRadius: Radius.lg, overflow: 'hidden', minHeight: 180 },
-    aiCircle: {
-      position: 'absolute', width: 200, height: 200, borderRadius: 100,
-      backgroundColor: 'rgba(255,255,255,0.08)', right: -50, top: -50,
-    },
-    aiCircle2: {
-      position: 'absolute', width: 120, height: 120, borderRadius: 60,
-      backgroundColor: 'rgba(255,255,255,0.05)', right: 60, bottom: -20,
+      backgroundColor: C.primary, borderRadius: Radius.lg,
+      padding: Spacing.lg, gap: Spacing.md,
+      shadowColor: C.primary, shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2, shadowRadius: 12, elevation: 4,
     },
     aiBadge: {
       flexDirection: 'row', alignItems: 'center', gap: 5,
-      backgroundColor: 'rgba(255,255,255,0.18)', alignSelf: 'flex-start',
+      backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'flex-start',
       paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.full,
     },
-    aiBadgeText: { fontSize: FontSize.xs, fontWeight: '700', color: 'rgba(255,255,255,0.95)', letterSpacing: 1.2 },
+    aiBadgeText: { fontSize: FontSize.xs, fontWeight: '700', color: '#fff', letterSpacing: 1.2 },
     aiTitle: { fontSize: FontSize.xl, fontWeight: '300', color: '#fff', lineHeight: 28, letterSpacing: -0.2, flex: 1 },
     aiActions: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap', alignItems: 'center' },
     aiBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 6,
-      backgroundColor: 'rgba(255,255,255,0.96)', paddingHorizontal: Spacing.md,
+      backgroundColor: '#ffffff', paddingHorizontal: Spacing.md,
       paddingVertical: 10, borderRadius: Radius.full,
     },
     aiBtnText: { fontSize: FontSize.sm, fontWeight: '700', color: C.primary },
     aiCaption: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)', fontStyle: 'italic' },
+    studyCard: {
+      backgroundColor: C.card,
+      borderColor: C.cardBorder,
+      borderWidth: 1,
+      borderRadius: Radius.lg,
+      padding: Spacing.lg,
+      gap: Spacing.md,
+      marginTop: Spacing.xs,
+    },
+    studyHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.md,
+    },
+    studyIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: Radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    studyTitleWrap: {
+      flex: 1,
+      gap: 2,
+    },
+    studyTitle: {
+      fontSize: FontSize.md,
+      fontWeight: '700',
+      color: C.text,
+    },
+    studySubtitle: {
+      fontSize: FontSize.xs,
+      color: C.muted,
+    },
+    studyDesc: {
+      fontSize: FontSize.sm,
+      color: C.textSecondary,
+      lineHeight: 20,
+    },
     statsRow: { flexDirection: 'row', gap: Spacing.sm },
-    statCard: { flex: 1, alignItems: 'center', gap: 5 },
+    statCard: { flex: 1, alignItems: 'center', gap: 5, backgroundColor: C.card, borderRadius: Radius.lg, padding: Spacing.md },
     statIconWrap: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
     statValue: { fontSize: FontSize.xl, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
     statLabel: { fontSize: FontSize.xs, color: C.muted, fontWeight: '500' },
     recentCard: {
       backgroundColor: C.card, borderRadius: Radius.lg, borderWidth: 1,
       borderColor: C.cardBorder, overflow: 'hidden',
-      shadowColor: C.cardShadowColor, shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.07, shadowRadius: 14, elevation: 3,
     },
     recentHeader: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -132,7 +250,7 @@ export default function DashboardPage() {
     recentHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     recentHeaderIcon: {
       width: 28, height: 28, borderRadius: 8,
-      backgroundColor: `${C.secondary}18`, alignItems: 'center', justifyContent: 'center',
+      backgroundColor: C.secondaryDim, alignItems: 'center', justifyContent: 'center',
     },
     recentTitle: { fontSize: FontSize.base, fontWeight: '600', color: C.text },
     viewAllBtn: {
@@ -143,61 +261,68 @@ export default function DashboardPage() {
     fileRow: {
       flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
       paddingHorizontal: Spacing.md, paddingVertical: Spacing.md,
-      borderBottomWidth: 1, borderBottomColor: `${C.cardBorder}80`,
+      borderBottomWidth: 1, borderBottomColor: C.cardBorder,
     },
     fileRowLast: { borderBottomWidth: 0 },
     fileIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
     fileInfo: { flex: 1, gap: 4 },
     fileName: { fontSize: FontSize.sm, color: C.text, fontWeight: '600' },
     fileMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    fileSubjectPill: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: Radius.full },
-    fileSubjectText: { fontSize: FontSize.xs, fontWeight: '600' },
+    fileSubjectPill: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: Radius.full, backgroundColor: C.primaryDim },
+    fileSubjectText: { fontSize: FontSize.xs, fontWeight: '600', color: C.primary },
     fileTime: { fontSize: FontSize.xs, color: C.muted },
+    fileEmpty: { padding: Spacing.lg, alignItems: 'center', gap: 4 },
+    fileEmptyText: { fontSize: FontSize.sm, color: C.muted, fontWeight: '500' },
+    fileEmptyHint: { fontSize: FontSize.xs, color: C.muted },
     subjectCard: {
       backgroundColor: C.card, borderRadius: Radius.lg, borderWidth: 1,
       borderColor: C.cardBorder, padding: Spacing.md, gap: Spacing.sm,
       borderLeftWidth: 3, borderLeftColor: C.accent,
-      shadowColor: C.cardShadowColor, shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.07, shadowRadius: 14, elevation: 3,
     },
     subjectHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     subjectHeaderIcon: {
       width: 28, height: 28, borderRadius: 8,
-      backgroundColor: `${C.accent}18`, alignItems: 'center', justifyContent: 'center',
+      backgroundColor: C.accentDim, alignItems: 'center', justifyContent: 'center',
     },
     subjectTitle: { fontSize: FontSize.base, fontWeight: '600', color: C.text },
     subjectList: { gap: Spacing.sm, marginTop: 4 },
     subjectRow: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingVertical: 6, paddingHorizontal: 8,
-      borderRadius: Radius.md, backgroundColor: `${C.cardBorder}30`,
+      borderRadius: Radius.md, backgroundColor: C.cardElevated,
     },
     subjectLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     subjectDot: { width: 8, height: 8, borderRadius: 4 },
     subjectName: { fontSize: FontSize.sm, fontWeight: '600', color: C.text },
     subjectCountRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     subjectCount: { fontSize: FontSize.xs, fontWeight: '600' },
-    statusCard: {
+    subjectEmpty: { padding: Spacing.md, alignItems: 'center' },
+    subjectEmptyText: { fontSize: FontSize.sm, color: C.muted },
+    shortcutCard: {
       backgroundColor: C.card, borderRadius: Radius.lg, borderWidth: 1,
-      borderColor: C.cardBorder, padding: Spacing.md, gap: Spacing.md,
+      borderColor: C.cardBorder, padding: Spacing.md,
       borderLeftWidth: 3, borderLeftColor: C.accentTeal,
-      flexDirection: 'row', alignItems: 'center',
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     },
-    statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.accentTeal, flexShrink: 0 },
-    statusText: { flex: 1, fontSize: FontSize.xs, color: C.muted, fontStyle: 'italic', lineHeight: 18 },
-    statusMeta: { gap: 6 },
-    statusMetaRow: { alignItems: 'flex-end', gap: 2 },
-    statusMetaLabel: { fontSize: 10, fontWeight: '700', color: C.muted, letterSpacing: 1 },
-    statusMetaValue: { fontSize: FontSize.xs, color: C.text, fontWeight: '500' },
-  }), [C])
+    shortcutIcon: {
+      width: 38, height: 38, borderRadius: 11,
+      backgroundColor: C.accentTealDim, alignItems: 'center', justifyContent: 'center',
+    },
+  }), [C, storagePct])
 
   return (
-    <VideoBg>
-      <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); load() }}
+              tintColor={C.primary}
+            />
+          }
         >
           {/* Top bar */}
           <View style={styles.topBar}>
@@ -212,11 +337,11 @@ export default function DashboardPage() {
 
           {/* Page header */}
           <View style={styles.pageHeader}>
-            <Text style={styles.pageTitle}>Commander's Deck</Text>
+            <Text style={styles.pageTitle}>Dashboard</Text>
             <Text style={styles.pageSubtitle}>Your scholarly universe, synchronized.</Text>
           </View>
 
-          {/* Storage card — teal accent */}
+          {/* Storage card */}
           <View style={styles.storageCard}>
             <View style={styles.storageTopRow}>
               <View style={styles.storageIconBadge}>
@@ -224,42 +349,60 @@ export default function DashboardPage() {
               </View>
               <Text style={styles.storageLabel}>STORAGE</Text>
             </View>
-            <Text style={styles.storageValue}>0.00 GB</Text>
-            <Text style={styles.storageCaption}>of 10 GB limit used</Text>
+            <Text style={styles.storageValue}>{formatBytes(totalBytes)}</Text>
+            <Text style={styles.storageCaption}>
+              {storagePct.toFixed(2)}% of 10 GB limit used
+            </Text>
             <View style={styles.storageBarTrack}>
               <View style={styles.storageBarFill} />
             </View>
           </View>
 
-          {/* Zenith Intelligence card */}
+          {/* AI card */}
           <View style={styles.aiCard}>
-            <LinearGradient
-              colors={C.gradientPrimary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.aiGrad}
-            >
-              <View style={styles.aiCircle} />
-              <View style={styles.aiCircle2} />
-              <View style={styles.aiBadge}>
-                <Sparkles size={11} color="rgba(255,255,255,0.95)" />
-                <Text style={styles.aiBadgeText}>ZENITH INTELLIGENCE</Text>
-              </View>
-              <Text style={styles.aiTitle}>
-                Transcend with AI: Interrogate your entire research library.
+            <View style={styles.aiBadge}>
+              <Sparkles size={11} color="#fff" />
+              <Text style={styles.aiBadgeText}>ZENITH INTELLIGENCE</Text>
+            </View>
+            <Text style={styles.aiTitle}>
+              Chat with your documents using AI-powered search and summarization.
+            </Text>
+            <View style={styles.aiActions}>
+              <Pressable
+                style={styles.aiBtn}
+                onPress={() => router.push('/(app)/chat/new')}
+              >
+                <MessageCircle size={15} color={C.primary} />
+                <Text style={styles.aiBtnText}>Start Chat</Text>
+              </Pressable>
+              <Text style={styles.aiCaption}>
+                {docs.length} documents indexed
               </Text>
-              <View style={styles.aiActions}>
-                <Pressable
-                  style={styles.aiBtn}
-                  onPress={() => router.push('/(app)/chat/new')}
-                >
-                  <MessageCircle size={15} color={C.primary} />
-                  <Text style={styles.aiBtnText}>Initiate Dialogue</Text>
-                </Pressable>
-                <Text style={styles.aiCaption}>Searching your archives...</Text>
-              </View>
-            </LinearGradient>
+            </View>
           </View>
+
+          {/* Study Materials card */}
+          <Pressable
+            onPress={() => router.push('/(app)/study-materials' as any)}
+            style={({ pressed }) => [
+              styles.studyCard,
+              pressed && { opacity: 0.88, transform: [{ scale: 0.995 }] }
+            ]}
+          >
+            <View style={styles.studyHeader}>
+              <View style={[styles.studyIconWrap, { backgroundColor: `${C.accent}14` }]}>
+                <Brain size={18} color={C.accent} />
+              </View>
+              <View style={styles.studyTitleWrap}>
+                <Text style={styles.studyTitle}>Study Materials</Text>
+                <Text style={styles.studySubtitle}>Active Recall & Retention</Text>
+              </View>
+              <ChevronRight size={18} color={C.muted} />
+            </View>
+            <Text style={styles.studyDesc}>
+              Generate interactive flashcards and multiple-choice quizzes from your uploaded documents to boost your study efficiency.
+            </Text>
+          </Pressable>
 
           {/* Stats row */}
           <View style={styles.statsRow}>
@@ -268,114 +411,121 @@ export default function DashboardPage() {
                 <View style={[styles.statIconWrap, { backgroundColor: stat.bg }]}>
                   <stat.icon size={17} color={stat.color} strokeWidth={2} />
                 </View>
-                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={styles.statValue}>{loading ? '—' : stat.value}</Text>
                 <Text style={styles.statLabel}>{stat.label}</Text>
               </Card>
             ))}
           </View>
 
-          {/* Recent Archives — blue accent */}
+          {/* Recent Archives */}
           <View style={styles.recentCard}>
             <View style={styles.recentHeader}>
               <View style={styles.recentHeaderLeft}>
                 <View style={styles.recentHeaderIcon}>
                   <Archive size={14} color={C.secondary} strokeWidth={2} />
                 </View>
-                <Text style={styles.recentTitle}>Recent Archives</Text>
+                <Text style={styles.recentTitle}>Recent Documents</Text>
               </View>
               <Pressable
                 style={styles.viewAllBtn}
-                onPress={() => router.push('/(app)/library')}
+                onPress={() => router.push('/(app)/documents')}
               >
                 <Text style={styles.viewAllText}>View all</Text>
               </Pressable>
             </View>
 
-            {recentFiles.map((file, i) => (
-              <Pressable key={i}>
-                {({ pressed }) => (
-                  <View style={[
-                    styles.fileRow,
-                    i === recentFiles.length - 1 && styles.fileRowLast,
-                    pressed && { backgroundColor: `${C.cardBorder}40` },
-                  ]}>
-                    <View style={[styles.fileIcon, { backgroundColor: `${fileTypeColor(file.type)}14` }]}>
-                      <FileText size={18} color={fileTypeColor(file.type)} />
-                    </View>
-                    <View style={styles.fileInfo}>
-                      <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
-                      <View style={styles.fileMeta}>
-                        <View style={[styles.fileSubjectPill, { backgroundColor: C.primaryDim }]}>
-                          <Text style={[styles.fileSubjectText, { color: C.primary }]}>{file.subject}</Text>
+            {recentDocs.length === 0 ? (
+              <View style={styles.fileEmpty}>
+                <Text style={styles.fileEmptyText}>No documents yet</Text>
+                <Text style={styles.fileEmptyHint}>
+                  Tap "View all" or use the upload shortcut below to add documents.
+                </Text>
+              </View>
+            ) : (
+              recentDocs.map((doc, i) => {
+                const color = fileTypeColor(doc.fileType, C)
+                const subjectLabel = getSubjectName(doc.subject, '')
+                return (
+                  <Pressable
+                    key={doc.id}
+                    onPress={() => router.push(`/(app)/document/${doc.id}` as any)}
+                  >
+                    {({ pressed }) => (
+                      <View
+                        style={[
+                          styles.fileRow,
+                          i === recentDocs.length - 1 && styles.fileRowLast,
+                          pressed && { backgroundColor: C.cardElevated },
+                        ]}
+                      >
+                        <View style={[styles.fileIcon, { backgroundColor: `${color}14` }]}>
+                          <FileText size={18} color={color} />
                         </View>
-                        <Text style={styles.fileTime}>{file.modified}</Text>
+                        <View style={styles.fileInfo}>
+                          <Text style={styles.fileName} numberOfLines={1}>{doc.title}</Text>
+                          <View style={styles.fileMeta}>
+                            {subjectLabel ? (
+                              <View style={styles.fileSubjectPill}>
+                                <Text style={styles.fileSubjectText}>{subjectLabel}</Text>
+                              </View>
+                            ) : null}
+                            <Text style={styles.fileTime}>{timeAgo(doc.updatedAt)}</Text>
+                          </View>
+                        </View>
                       </View>
-                    </View>
-                  </View>
-                )}
-              </Pressable>
-            ))}
+                    )}
+                  </Pressable>
+                )
+              })
+            )}
           </View>
 
-          {/* Subject Clusters — violet accent */}
+          {/* Subject Clusters */}
           <View style={styles.subjectCard}>
             <View style={styles.subjectHeader}>
               <View style={styles.subjectHeaderIcon}>
                 <BookOpen size={14} color={C.accent} strokeWidth={2} />
               </View>
-              <Text style={styles.subjectTitle}>Subject Clusters</Text>
+              <Text style={styles.subjectTitle}>Top Subjects</Text>
             </View>
-            <View style={styles.subjectList}>
-              {subjects.map((subj, i) => (
-                <View key={i} style={styles.subjectRow}>
-                  <View style={styles.subjectLeft}>
-                    <View style={[styles.subjectDot, { backgroundColor: subj.color }]} />
-                    <Text style={styles.subjectName}>{subj.name}</Text>
-                  </View>
-                  <View style={styles.subjectCountRow}>
-                    <Text style={[styles.subjectCount, { color: subj.color }]}>{subj.count}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Status bar */}
-          <View style={styles.statusCard}>
-            <View style={styles.statusDot} />
-            <Text style={styles.statusText}>
-              The library grows at 2.4 documents per day. 342 total archives available.
-            </Text>
-            <View style={styles.statusMeta}>
-              <View style={styles.statusMetaRow}>
-                <Text style={styles.statusMetaLabel}>UPTIME</Text>
-                <Text style={styles.statusMetaValue}>99.98%</Text>
+            {subjectsWithCount.length === 0 ? (
+              <View style={styles.subjectEmpty}>
+                <Text style={styles.subjectEmptyText}>
+                  No subjects yet. Create one in the Subjects tab.
+                </Text>
               </View>
-              <View style={styles.statusMetaRow}>
-                <Text style={styles.statusMetaLabel}>SYNC</Text>
-                <Text style={styles.statusMetaValue}>Active</Text>
+            ) : (
+              <View style={styles.subjectList}>
+                {subjectsWithCount.map((subj) => (
+                  <View key={subj.id} style={styles.subjectRow}>
+                    <View style={styles.subjectLeft}>
+                      <View style={[styles.subjectDot, { backgroundColor: subj.color || C.primary }]} />
+                      <Text style={styles.subjectName}>{subj.name}</Text>
+                    </View>
+                    <View style={styles.subjectCountRow}>
+                      <Text style={[styles.subjectCount, { color: C.primary }]}>
+                        {subj.count} docs
+                      </Text>
+                    </View>
+                  </View>
+                ))}
               </View>
-            </View>
+            )}
           </View>
 
           {/* Sync Documents shortcut */}
-          <Pressable onPress={() => router.push('/(app)/library')}>
+          <Pressable onPress={() => router.push('/(app)/documents')}>
             {({ pressed }) => (
-              <View style={[{
-                backgroundColor: C.card, borderRadius: Radius.lg, borderWidth: 1,
-                borderColor: C.cardBorder, padding: Spacing.md,
-                borderLeftWidth: 3, borderLeftColor: C.accentTeal,
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                opacity: pressed ? 0.75 : 1,
-              }]}>
+              <View style={[styles.shortcutCard, pressed && { opacity: 0.8 }]}>
                 <View style={{ gap: 3 }}>
-                  <Text style={{ fontSize: FontSize.base, fontWeight: '600', color: C.text }}>Sync Documents</Text>
-                  <Text style={{ fontSize: FontSize.xs, color: C.muted }}>Upload to library</Text>
+                  <Text style={{ fontSize: FontSize.base, fontWeight: '600', color: C.text }}>
+                    Sync Documents
+                  </Text>
+                  <Text style={{ fontSize: FontSize.xs, color: C.muted }}>
+                    Upload new files to your library
+                  </Text>
                 </View>
-                <View style={{
-                  width: 38, height: 38, borderRadius: 11,
-                  backgroundColor: `${C.accentTeal}18`, alignItems: 'center', justifyContent: 'center',
-                }}>
+                <View style={styles.shortcutIcon}>
                   <UploadCloud size={18} color={C.accentTeal} strokeWidth={2} />
                 </View>
               </View>
@@ -383,6 +533,5 @@ export default function DashboardPage() {
           </Pressable>
         </ScrollView>
       </SafeAreaView>
-    </VideoBg>
   )
 }

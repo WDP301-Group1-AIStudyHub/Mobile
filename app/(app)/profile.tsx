@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   Pressable,
@@ -21,13 +21,14 @@ import {
   Sun,
   User,
 } from 'lucide-react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import VideoBg from '../../components/ui/VideoBg'
 import Card from '../../components/ui/Card'
 import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors, useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../hooks/useAuth'
+import { listChatHistory } from '../../services/chatApi'
+import { listDocuments } from '../../services/documentApi'
+import { listSubjects } from '../../services/subjectApi'
 
 type MenuKey = 'profile' | 'password' | 'notifications' | 'theme' | 'subjects' | 'model' | 'security' | 'settings'
 
@@ -36,16 +37,42 @@ export default function ProfilePage() {
   const [signingOut, setSigningOut] = useState(false)
   const C = useColors()
   const { isDark, toggle } = useTheme()
+  const [stats, setStats] = useState({ documents: 0, chats: 0, subjects: 0 })
 
-  const menuSections = useMemo(() => [
-    {
-      title: 'Account',
-      items: [
-        { icon: User, label: 'Edit Profile', key: 'profile' as MenuKey, color: C.primary },
-        { icon: Lock, label: 'Change Password', key: 'password' as MenuKey, color: C.accent },
-        { icon: Bell, label: 'Notifications', key: 'notifications' as MenuKey, color: C.accentGold },
-      ],
-    },
+  const user = state.status === 'authenticated' ? state.user : null
+
+  useEffect(() => {
+    let active = true
+    if (!user || user.role === 'admin') return
+
+    Promise.all([
+      listDocuments().catch(() => []),
+      listChatHistory().catch(() => ({ histories: [], total: 0 })),
+      listSubjects().catch(() => []),
+    ]).then(([documents, chats, subjects]) => {
+      if (!active) return
+      setStats({
+        documents: documents.length,
+        chats: chats.total || chats.histories.length,
+        subjects: subjects.length,
+      })
+    })
+
+    return () => {
+      active = false
+    }
+  }, [user])
+  
+  const menuSections = useMemo(() => {
+    const sections = [
+      {
+        title: 'Account',
+        items: [
+          { icon: User, label: 'Edit Profile', key: 'profile' as MenuKey, color: C.primary },
+          { icon: Lock, label: 'Change Password', key: 'password' as MenuKey, color: C.accent },
+          { icon: Bell, label: 'Notifications', key: 'notifications' as MenuKey, color: C.accentGold },
+        ],
+      },
     {
       title: 'Preferences',
       items: [
@@ -57,22 +84,24 @@ export default function ProfilePage() {
     {
       title: 'Security',
       items: [
-        { icon: Shield, label: 'Privacy & Security', key: 'security' as MenuKey, color: C.accentCoral },
+        { icon: Shield, label: 'Privacy & Security', key: 'security' as MenuKey, color: C.error },
         { icon: Settings, label: 'App Settings', key: 'settings' as MenuKey, color: C.muted },
       ],
-    },
-  ], [C, isDark])
+    }
+    ]
+    return sections
+  }, [C, isDark, user?.role])
 
   const styles = useMemo(() => StyleSheet.create({
-    safe: { flex: 1 },
-    content: { padding: Spacing.lg, paddingBottom: Spacing.xxl, gap: Spacing.lg },
+    safe: { flex: 1, backgroundColor: C.background },
+    content: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 96, gap: Spacing.lg },
     pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
     profileCard: {
       backgroundColor: C.card, borderWidth: 1, borderColor: C.cardBorder,
       borderRadius: 20, padding: Spacing.lg, flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
     },
     avatarContainer: { flexShrink: 0 },
-    avatarRing: { width: 70, height: 70, borderRadius: 35, alignItems: 'center', justifyContent: 'center', padding: 3 },
+    avatarRing: { width: 70, height: 70, borderRadius: 35, alignItems: 'center', justifyContent: 'center', padding: 3, backgroundColor: C.primary },
     avatarInner: {
       width: 64, height: 64, borderRadius: 32, backgroundColor: C.primaryDim,
       alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.cardElevated,
@@ -93,7 +122,6 @@ export default function ProfilePage() {
     },
     statItem: {
       flex: 1, alignItems: 'center', paddingVertical: Spacing.md, gap: 4,
-      borderRightWidth: 1, borderRightColor: C.cardBorder,
     },
     statValue: { fontSize: FontSize.xl, fontWeight: '700', color: C.text },
     statLabel: { fontSize: FontSize.xs, color: C.muted },
@@ -107,6 +135,9 @@ export default function ProfilePage() {
       flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
       paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
     },
+    menuItemInner: {
+      flexDirection: 'row', alignItems: 'center', gap: Spacing.md, flex: 1,
+    },
     menuIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
     menuLabel: { flex: 1, fontSize: FontSize.sm, fontWeight: '500', color: C.text },
     divider: { height: 1, backgroundColor: C.cardBorder, marginLeft: 68 },
@@ -118,17 +149,21 @@ export default function ProfilePage() {
     version: { textAlign: 'center', fontSize: FontSize.xs, color: C.muted },
   }), [C])
 
-  const user = state.status === 'authenticated' ? state.user : null
+
 
   const handleMenuPress = (key: MenuKey) => {
+    const basePath = user?.role === 'admin' ? '/admin' : '/(app)'
     if (key === 'profile') {
-      router.push('/(app)/edit-profile')
+      router.push(`${basePath}/edit-profile` as any)
     } else if (key === 'password') {
-      router.push('/(app)/change-password')
+      router.push(`${basePath}/change-password` as any)
     } else if (key === 'theme') {
       toggle()
+    } else if (key === 'subjects') {
+      if (user?.role !== 'admin') {
+        router.push('/(app)/subjects')
+      }
     }
-    // other keys are placeholders for future screens
   }
 
   const handleSignOut = () => {
@@ -142,8 +177,11 @@ export default function ProfilePage() {
           style: 'destructive',
           onPress: async () => {
             setSigningOut(true)
-            await signOut()
-            router.replace('/(auth)/login')
+            try {
+              await signOut()
+            } finally {
+              setSigningOut(false)
+            }
           },
         },
       ],
@@ -151,9 +189,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <VideoBg>
-      <SafeAreaView style={styles.safe}>
-        <ScrollView
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
@@ -166,16 +203,11 @@ export default function ProfilePage() {
           {/* Avatar & Info */}
           <View style={styles.profileCard}>
             <View style={styles.avatarContainer}>
-              <LinearGradient
-                colors={C.gradientPrimary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.avatarRing}
-              >
+              <View style={styles.avatarRing}>
                 <View style={styles.avatarInner}>
                   <User size={36} color={C.primary} />
                 </View>
-              </LinearGradient>
+              </View>
             </View>
 
             <View style={styles.profileInfo}>
@@ -198,19 +230,27 @@ export default function ProfilePage() {
             </Pressable>
           </View>
 
-          {/* Stats Row */}
-          <View style={styles.statsRow}>
-            {[
-              { label: 'Documents', value: '342' },
-              { label: 'Chats', value: '18' },
-              { label: 'Subjects', value: '12' },
-            ].map((s) => (
-              <View key={s.label} style={styles.statItem}>
-                <Text style={styles.statValue}>{s.value}</Text>
-                <Text style={styles.statLabel}>{s.label}</Text>
-              </View>
-            ))}
-          </View>
+          {/* Stats Row - Only for normal users */}
+          {user?.role !== 'admin' && (
+            <View style={styles.statsRow}>
+              {[
+                { label: 'Documents', value: String(stats.documents) },
+                { label: 'Chats', value: String(stats.chats) },
+                { label: 'Subjects', value: String(stats.subjects) },
+              ].map((s, idx) => (
+                <View
+                  key={s.label}
+                  style={[
+                    styles.statItem,
+                    idx < 2 && { borderRightWidth: 1, borderRightColor: C.cardBorder },
+                  ]}
+                >
+                  <Text style={styles.statValue}>{s.value}</Text>
+                  <Text style={styles.statLabel}>{s.label}</Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Menu Sections */}
           {menuSections.map((section) => (
@@ -221,13 +261,13 @@ export default function ProfilePage() {
                   <View key={item.key}>
                     <Pressable style={styles.menuItem} onPress={() => handleMenuPress(item.key)}>
                       {({ pressed }) => (
-                        <>
-                          <View style={[styles.menuIconWrap, { backgroundColor: `${item.color}14` }, pressed && { opacity: 0.7 }]}>
+                        <View style={[styles.menuItemInner, pressed && { opacity: 0.7 }]}>
+                          <View style={[styles.menuIconWrap, { backgroundColor: `${item.color}14` }]}>
                             <item.icon size={18} color={item.color} />
                           </View>
                           <Text style={styles.menuLabel}>{item.label}</Text>
                           <ChevronRight size={16} color={C.muted} />
-                        </>
+                        </View>
                       )}
                     </Pressable>
                     {i < section.items.length - 1 && (
@@ -254,7 +294,5 @@ export default function ProfilePage() {
           <Text style={styles.version}>AI Study Hub v1.0.0</Text>
         </ScrollView>
       </SafeAreaView>
-    </VideoBg>
   )
 }
-

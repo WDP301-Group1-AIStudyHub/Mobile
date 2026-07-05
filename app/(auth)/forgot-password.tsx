@@ -11,7 +11,6 @@ import {
 import { router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowLeft, Mail } from 'lucide-react-native'
-import VideoBg from '../../components/ui/VideoBg'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import BrandLogo from '../../components/ui/BrandLogo'
@@ -157,9 +156,8 @@ export default function ForgotPasswordPage() {
 }), [C])
 
   return (
-    <VideoBg>
-      <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
@@ -230,6 +228,5 @@ export default function ForgotPasswordPage() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </VideoBg>
   )
 }

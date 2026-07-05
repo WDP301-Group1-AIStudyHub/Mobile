@@ -1,113 +1,96 @@
+// Clean color palette - no gradients, solid colors only
 export const LightColors = {
-  // Backgrounds — warm light cosmos
-  background: '#f7f5ed',
-  backgroundTop: '#fffdfa',
-  backgroundMid: '#f1f5fb',
-  backgroundBottom: '#f7f2e6',
-  card: 'rgba(255, 255, 252, 0.75)',
-  cardBorder: 'rgba(155, 170, 220, 0.55)',
-  cardElevated: 'rgba(255, 255, 255, 0.90)',
-  cardShadowColor: '#17244e',
+  // Backgrounds
+  background: '#f7f8f1', // moon-paper
+  backgroundTop: '#f7f8f1',
+  backgroundMid: '#f7f8f1',
+  backgroundBottom: '#f7f8f1',
+  card: '#fffdf7', // paper
+  cardBorder: '#d5dfd0', // border
+  cardElevated: '#ffffff',
+  cardShadowColor: 'rgba(73, 107, 85, 0.1)', // shadow-soft
 
-  // Brand
-  primary: '#4f63d2',
-  primaryLight: '#6b7ff0',
-  primaryDim: 'rgba(79, 99, 210, 0.1)',
-  secondary: '#2563eb',
-  secondaryDim: 'rgba(37, 99, 235, 0.1)',
-  accent: '#7c3aed',
-  accentTeal: '#0d9488',
-  accentGold: '#c9860e',
-  accentCoral: '#e05a48',
-
-  // Gradients
-  gradientPrimary: ['#4f63d2', '#6d28d9'] as const,
-  gradientHero: ['#3b5bdb', '#0ea5e9'] as const,
-  gradientGold: ['#d97706', '#f59e0b'] as const,
-  gradientBg: ['#fffdfa', '#f1f5fb', '#f7f2e6'] as const,
+  // Brand colors
+  primary: '#496b55', // moss
+  primaryLight: '#638f74', // accent-teal
+  primaryDim: 'rgba(73, 107, 85, 0.1)',
+  secondary: '#eef6f1', // lichen/dew
+  secondaryDim: 'rgba(238, 246, 241, 0.5)',
+  accent: '#dce7d4', // sage
+  accentDim: 'rgba(220, 231, 212, 0.2)',
+  accentTeal: '#6f9b9b', // accent-cyan
+  accentTealDim: 'rgba(111, 155, 155, 0.1)',
+  accentGold: '#9a7a3d', // accent-gold
+  accentGoldDim: 'rgba(154, 122, 61, 0.1)',
+  accentCoral: '#b8876c', // clay
 
   // Text
-  text: '#1a2340',
-  textSecondary: '#344470',
-  muted: '#6b7a9f',
-  mutedLight: '#8a94b8',
+  text: '#263126', // bark
+  textSecondary: '#617064', // muted-foreground
+  muted: '#88968b', // readable muted text
+  mutedLight: '#a6b4a9', // readable lighter muted text
 
   // Semantic
-  success: '#16a34a',
-  successDim: 'rgba(22, 163, 74, 0.1)',
-  error: '#dc2626',
-  errorDim: 'rgba(220, 38, 38, 0.08)',
-  warning: '#d97706',
-  warningDim: 'rgba(217, 119, 6, 0.1)',
-  info: '#0ea5e9',
-  infoDim: 'rgba(14, 165, 233, 0.1)',
+  success: '#527267', // accent-sapphire
+  successDim: 'rgba(82, 114, 103, 0.1)',
+  error: '#9f5d55', // berry
+  errorDim: 'rgba(159, 93, 85, 0.1)',
+  warning: '#9a7a3d',
+  warningDim: 'rgba(154, 122, 61, 0.1)',
+  info: '#6f9b9b',
+  infoDim: 'rgba(111, 155, 155, 0.1)',
 
   // Overlay
-  overlay: 'rgba(247, 245, 237, 0.85)',
-  overlayDark: 'rgba(26, 35, 64, 0.06)',
-
-  // Decorative (light mode cosmos dots + nebulas)
-  starColor: 'rgba(31, 47, 100, 0.16)',
-  starBright: 'rgba(31, 47, 100, 0.32)',
-  nebulaBlue: 'rgba(65, 145, 235, 0.13)',
-  nebulaGold: 'rgba(220, 165, 60, 0.14)',
-  nebulaTeal: 'rgba(31, 184, 175, 0.09)',
-  nebulaViolet: 'rgba(109, 40, 217, 0.07)',
+  overlay: 'rgba(247, 248, 241, 0.6)',
+  overlayDark: 'rgba(38, 49, 38, 0.2)', // bark 20%
 }
 
-// Dark mode palette — deep space cosmos
+// Dark mode palette
 export const DarkColors = {
-  background: '#0d1117',
-  backgroundTop: '#0a0e1a',
-  backgroundMid: '#111827',
-  backgroundBottom: '#0f1923',
-  card: 'rgba(15, 19, 35, 0.72)',
-  cardBorder: 'rgba(79, 99, 210, 0.38)',
-  cardElevated: 'rgba(22, 28, 50, 0.88)',
+  // Backgrounds
+  background: '#0f172a',
+  backgroundTop: '#0f172a',
+  backgroundMid: '#0f172a',
+  backgroundBottom: '#0f172a',
+  card: '#1e293b',
+  cardBorder: '#334155',
+  cardElevated: '#253347',
   cardShadowColor: '#000000',
 
-  primary: '#6b7ff0',
+  // Brand colors
+  primary: '#60a5fa',
   primaryLight: '#818cf8',
-  primaryDim: 'rgba(107, 127, 240, 0.15)',
-  secondary: '#3b82f6',
-  secondaryDim: 'rgba(59, 130, 246, 0.15)',
+  primaryDim: 'rgba(96, 165, 250, 0.15)',
+  secondary: '#38bdf8',
+  secondaryDim: 'rgba(56, 189, 248, 0.15)',
   accent: '#a78bfa',
-  accentTeal: '#14b8a6',
+  accentDim: 'rgba(167, 139, 250, 0.15)',
+  accentTeal: '#2dd4bf',
+  accentTealDim: 'rgba(45, 212, 191, 0.15)',
   accentGold: '#fbbf24',
+  accentGoldDim: 'rgba(251, 191, 36, 0.15)',
   accentCoral: '#f87171',
 
-  gradientPrimary: ['#4f63d2', '#6d28d9'] as const,
-  gradientHero: ['#3b5bdb', '#0ea5e9'] as const,
-  gradientGold: ['#d97706', '#f59e0b'] as const,
-  gradientBg: ['#0a0e1a', '#111827', '#0f1923'] as const,
+  // Text
+  text: '#f1f5f9',
+  textSecondary: '#cbd5e1',
+  muted: '#94a3b8',
+  mutedLight: '#64748b',
 
-  text: '#e8eaf6',
-  textSecondary: '#b0bcd8',
-  muted: '#8892b0',
-  mutedLight: '#667090',
-
+  // Semantic
   success: '#4ade80',
-  successDim: 'rgba(74, 222, 128, 0.12)',
+  successDim: 'rgba(74, 222, 128, 0.15)',
   error: '#f87171',
-  errorDim: 'rgba(248, 113, 113, 0.12)',
+  errorDim: 'rgba(248, 113, 113, 0.15)',
   warning: '#fbbf24',
-  warningDim: 'rgba(251, 191, 36, 0.12)',
+  warningDim: 'rgba(251, 191, 36, 0.15)',
   info: '#38bdf8',
-  infoDim: 'rgba(56, 189, 248, 0.12)',
+  infoDim: 'rgba(56, 189, 248, 0.15)',
 
-  overlay: 'rgba(13, 17, 23, 0.85)',
-  overlayDark: 'rgba(0, 0, 0, 0.4)',
-
-  starColor: 'rgba(255, 255, 255, 0.25)',
-  starBright: 'rgba(255, 255, 255, 0.6)',
-  nebulaBlue: 'rgba(65, 145, 235, 0.18)',
-  nebulaGold: 'rgba(220, 165, 60, 0.15)',
-  nebulaTeal: 'rgba(31, 184, 175, 0.12)',
-  nebulaViolet: 'rgba(109, 40, 217, 0.10)',
+  // Overlay
+  overlay: 'rgba(15, 23, 42, 0.5)',
+  overlayDark: 'rgba(0, 0, 0, 0.2)',
 }
-
-// Default export stays as LightColors for backward compat during migration
-export const Colors = LightColors
 
 export type ColorPalette = typeof LightColors | typeof DarkColors
 
@@ -121,10 +104,10 @@ export const Spacing = {
 }
 
 export const Radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
+  sm: 6,
+  md: 10,
+  lg: 14,
+  xl: 20,
   full: 9999,
 }
 

@@ -1,4 +1,4 @@
-export type AuthView = 'login' | 'register' | 'forgot-password' | 'reset-password'
+
 
 export interface ApiResponse<T> {
   success: boolean

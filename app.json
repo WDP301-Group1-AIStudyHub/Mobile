@@ -18,7 +18,8 @@
       "adaptiveIcon": {
         "backgroundColor": "#050816"
       },
-      "package": "com.aistudyhub.mobile"
+      "package": "com.aistudyhub.mobile",
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "bundler": "metro",
@@ -28,7 +29,6 @@
       "expo-router",
       "expo-font",
       "expo-secure-store",
-      "expo-asset",
       "expo-video"
     ],
     "experiments": {
