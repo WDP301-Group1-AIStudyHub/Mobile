@@ -16,10 +16,12 @@ import Input from '../../components/ui/Input'
 import BrandLogo from '../../components/ui/BrandLogo'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
+import { useAuth } from '../../hooks/useAuth'
 import { register } from '../../services/authApi'
 
 export default function RegisterPage() {
   const C = useColors()
+  const { signIn } = useAuth()
   const [form, setForm] = useState({ fullName: '', email: '', password: '', confirm: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -41,7 +43,8 @@ export default function RegisterPage() {
     setError('')
     setLoading(true)
     try {
-      await register({ fullName: form.fullName, email: form.email, password: form.password })
+      const user = await register({ fullName: form.fullName, email: form.email, password: form.password })
+      signIn(user)
       router.replace('/(app)/dashboard')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to create account.')

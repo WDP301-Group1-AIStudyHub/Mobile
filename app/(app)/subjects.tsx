@@ -30,6 +30,7 @@ type FormState = {
   code: string
   description: string
   color: string
+  semester: string
 }
 
 const COLOR_OPTIONS = [
@@ -48,6 +49,7 @@ const EMPTY_FORM: FormState = {
   code: '',
   description: '',
   color: COLOR_OPTIONS[0],
+  semester: '',
 }
 
 // Hàm helper giúp lấy ID an toàn, tương thích với cả Mongoose (_id) và các DB khác (id)
@@ -97,6 +99,7 @@ export default function SubjectsPage() {
       code: s.code ?? '',
       description: s.description ?? '',
       color: s.color ?? COLOR_OPTIONS[0],
+      semester: s.semester ?? '',
     })
     setShowModal(true)
   }
@@ -121,6 +124,7 @@ export default function SubjectsPage() {
         code: form.code.trim() || undefined,
         description: form.description.trim() || undefined,
         color: form.color,
+        semester: form.semester.trim() || undefined,
       }
       if (editingId) {
         const updated = await updateSubject(editingId, payload)
@@ -310,6 +314,22 @@ export default function SubjectsPage() {
                 ]}
               />
 
+              <Text style={[styles.label, { color: C.textSecondary }]}>Semester</Text>
+              <TextInput
+                value={form.semester}
+                onChangeText={(v) => setForm((f) => ({ ...f, semester: v }))}
+                placeholder="e.g. Fall 2026"
+                placeholderTextColor={C.muted}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: C.cardElevated,
+                    borderColor: C.cardBorder,
+                    color: C.text,
+                  },
+                ]}
+              />
+
               <Text style={[styles.label, { color: C.textSecondary }]}>
                 Description
               </Text>
@@ -394,7 +414,10 @@ function SubjectRow({
             {item.name}
           </Text>
           {item.code ? (
-            <Text style={[styles.rowCode, { color: C.primary }]}>{item.code}</Text>
+            <Text style={[styles.rowCode, { color: C.primary }]}>Code: {item.code}</Text>
+          ) : null}
+          {item.semester ? (
+            <Text style={[styles.rowSemester, { color: C.primary }]}>Semester: {item.semester}</Text>
           ) : null}
           {item.description ? (
             <Text
@@ -482,6 +505,7 @@ const styles = StyleSheet.create({
   rowInfo: { flex: 1 },
   rowName: { fontSize: FontSize.base, fontWeight: '700' },
   rowCode: { fontSize: FontSize.xs, fontWeight: '600', marginTop: 2 },
+  rowSemester: { fontSize: FontSize.xs, fontWeight: '500', marginTop: 2 },
   rowDesc: { fontSize: FontSize.xs, marginTop: 4 },
   rowActions: { flexDirection: 'row', gap: 4 },
   iconBtn: { padding: 8, borderRadius: Radius.sm },
