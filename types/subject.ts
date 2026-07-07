@@ -4,6 +4,7 @@ export interface SubjectItem {
   code?: string
   description?: string
   color?: string
+  semester?: string
   createdAt: string
   updatedAt: string
 }
@@ -13,6 +14,7 @@ export interface CreateSubjectPayload {
   code?: string
   description?: string
   color?: string
+  semester?: string
 }
 
 export interface UpdateSubjectPayload {
@@ -20,6 +22,7 @@ export interface UpdateSubjectPayload {
   code?: string
   description?: string
   color?: string
+  semester?: string
 }
 
 export type SubjectsResponse = SubjectItem[]

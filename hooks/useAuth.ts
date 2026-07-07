@@ -65,6 +65,10 @@ export function useAuth() {
     }
   }, [])
 
+  function signIn(user: AuthUser) {
+    setGlobalState({ status: 'authenticated', user })
+  }
+
   async function signOut() {
     try {
       await logout()
@@ -75,5 +79,5 @@ export function useAuth() {
     router.replace('/(auth)/login')
   }
 
-  return { state, signOut }
+  return { state, signIn, signOut }
 }

@@ -16,10 +16,12 @@ import Input from '../../components/ui/Input'
 import BrandLogo from '../../components/ui/BrandLogo'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
+import { useAuth } from '../../hooks/useAuth'
 import { login } from '../../services/authApi'
 
 export default function LoginPage() {
   const C = useColors()
+  const { signIn } = useAuth()
   const [form, setForm] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -34,6 +36,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const user = await login({ email: form.email, password: form.password })
+      signIn(user)
       if (user.role === 'admin') {
         router.replace('/admin')
       } else {
