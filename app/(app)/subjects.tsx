@@ -325,7 +325,7 @@ export default function SubjectsPage() {
               <TextInput
                 value={form.semester}
                 onChangeText={(v) => setForm((f) => ({ ...f, semester: v }))}
-                placeholder="e.g. Semester 1 - 2026"
+                placeholder="e.g. Fall 2026"
                 placeholderTextColor={C.muted}
                 style={[
                   styles.input,
@@ -421,7 +421,10 @@ function SubjectRow({
             {item.name}
           </Text>
           {item.code ? (
-            <Text style={[styles.rowCode, { color: C.primary }]}>{item.code}</Text>
+            <Text style={[styles.rowCode, { color: C.primary }]}>Code: {item.code}</Text>
+          ) : null}
+          {item.semester ? (
+            <Text style={[styles.rowSemester, { color: C.primary }]}>Semester: {item.semester}</Text>
           ) : null}
           {item.semester ? (
             <Text style={[styles.rowCode, { color: C.muted }]}>{item.semester}</Text>
@@ -512,6 +515,7 @@ const styles = StyleSheet.create({
   rowInfo: { flex: 1 },
   rowName: { fontSize: FontSize.base, fontWeight: '700' },
   rowCode: { fontSize: FontSize.xs, fontWeight: '600', marginTop: 2 },
+  rowSemester: { fontSize: FontSize.xs, fontWeight: '500', marginTop: 2 },
   rowDesc: { fontSize: FontSize.xs, marginTop: 4 },
   rowActions: { flexDirection: 'row', gap: 4 },
   iconBtn: { padding: 8, borderRadius: Radius.sm },
