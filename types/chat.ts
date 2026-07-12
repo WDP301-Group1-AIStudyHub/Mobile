@@ -77,3 +77,4 @@ export interface ChatHistoryListResponse {
   histories: ChatHistoryItem[]
   total: number
 }
+export type ChatScope = 'single_document' | 'subject_all' | 'document_set' | 'library_all'

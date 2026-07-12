@@ -12,6 +12,7 @@ import {
   RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { router } from 'expo-router'
 import {
   BarChart2,
   Plus,
@@ -481,6 +482,9 @@ export default function BenchmarksPage() {
                 <Plus size={15} color="#fff" strokeWidth={2.5} />
                 <Text style={styles.addBtnText}>New</Text>
               </View>
+            </Pressable>
+            <Pressable style={styles.addBtn} onPress={() => router.push('/(app)/evaluation' as any)}>
+              <Text style={styles.addBtnText}>Evaluation</Text>
             </Pressable>
           </View>
 

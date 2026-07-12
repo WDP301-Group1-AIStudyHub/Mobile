@@ -142,6 +142,9 @@ export default function AppLayout() {
         name="benchmarks"
         options={{ href: null }}
       />
+      <Tabs.Screen name="evaluation" options={{ href: null }} />
+      <Tabs.Screen name="subject/[id]" options={{ href: null }} />
+      <Tabs.Screen name="chat/artifacts" options={{ href: null }} />
       <Tabs.Screen
         name="profile"
         options={{

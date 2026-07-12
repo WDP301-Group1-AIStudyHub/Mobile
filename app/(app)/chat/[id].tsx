@@ -14,7 +14,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
-import { ArrowLeft, BookOpen, ChevronDown, ChevronRight, FileText, Paperclip, Send, Sparkles, X } from 'lucide-react-native'
+import { ArrowLeft, BookOpen, BrainCircuit, ChevronDown, ChevronRight, FileText, Paperclip, Send, Sparkles, X } from 'lucide-react-native'
 import { FontSize, Spacing, Radius } from '../../../constants/colors'
 import { useColors } from '../../../contexts/ThemeContext'
 import { listDocuments } from '../../../services/documentApi'
@@ -512,7 +512,9 @@ export default function ChatConversationPage() {
                 {isNewChat ? 'New Chat' : 'AI Assistant'}
               </Text>
             </View>
-            <View style={{ width: 36 }} />
+            <Pressable onPress={() => router.push({ pathname: '/(app)/chat/artifacts', params: { threadId: id, documentId: pinnedDoc?.id || '' } } as any)} style={styles.backBtn} accessibilityLabel="Open chat artifacts">
+              <BrainCircuit size={20} color={C.primary} />
+            </Pressable>
           </View>
 
           {/* Messages */}

@@ -251,6 +251,7 @@ export default function SubjectsPage() {
                   <SubjectRow
                     key={safeKey}
                     item={item}
+                    onOpen={(subject) => router.push(`/(app)/subject/${getSafeId(subject)}` as any)}
                     onEdit={openEdit}
                     onDelete={handleDelete}
                   />
@@ -404,10 +405,12 @@ function SubjectRow({
   item,
   onEdit,
   onDelete,
+  onOpen,
 }: {
   item: SubjectItem
   onEdit: (s: SubjectItem) => void
   onDelete: (s: SubjectItem) => void
+  onOpen: (s: SubjectItem) => void
 }) {
   const C = useColors()
   return (
@@ -416,7 +419,7 @@ function SubjectRow({
         <View
           style={[styles.colorChip, { backgroundColor: item.color ?? C.primary }]}
         />
-        <View style={styles.rowInfo}>
+        <Pressable style={styles.rowInfo} onPress={() => onOpen(item)}>
           <Text style={[styles.rowName, { color: C.text }]} numberOfLines={1}>
             {item.name}
           </Text>
@@ -426,9 +429,6 @@ function SubjectRow({
           {item.semester ? (
             <Text style={[styles.rowSemester, { color: C.primary }]}>Semester: {item.semester}</Text>
           ) : null}
-          {item.semester ? (
-            <Text style={[styles.rowCode, { color: C.muted }]}>{item.semester}</Text>
-          ) : null}
           {item.description ? (
             <Text
               style={[styles.rowDesc, { color: C.muted }]}
@@ -437,7 +437,7 @@ function SubjectRow({
               {item.description}
             </Text>
           ) : null}
-        </View>
+        </Pressable>
         <View style={styles.rowActions}>
           <Pressable
             onPress={() => onEdit(item)}
