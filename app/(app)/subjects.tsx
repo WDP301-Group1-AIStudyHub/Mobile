@@ -13,8 +13,8 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { BookOpen, Edit2, Plus, Trash2, X, FolderOpen } from 'lucide-react-native'
+import { router, useLocalSearchParams } from 'expo-router'
 import Card from '../../components/ui/Card'
-import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
 import {
@@ -28,6 +28,7 @@ import type { SubjectItem } from '../../types/subject'
 type FormState = {
   name: string
   code: string
+  semester: string
   description: string
   color: string
 }
@@ -46,6 +47,7 @@ const COLOR_OPTIONS = [
 const EMPTY_FORM: FormState = {
   name: '',
   code: '',
+  semester: '',
   description: '',
   color: COLOR_OPTIONS[0],
 }
@@ -59,6 +61,8 @@ const getSafeId = (item: any): string => {
 
 export default function SubjectsPage() {
   const C = useColors()
+  const { create } = useLocalSearchParams<{ create?: string }>()
+  const openedFromHub = create === '1'
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -84,17 +88,22 @@ export default function SubjectsPage() {
     load()
   }, [load])
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setShowModal(true)
-  }
+  }, [])
+
+  useEffect(() => {
+    if (openedFromHub) openCreate()
+  }, [openedFromHub, openCreate])
 
   const openEdit = (s: SubjectItem) => {
     setEditingId(getSafeId(s))
     setForm({
       name: s.name,
       code: s.code ?? '',
+      semester: s.semester ?? '',
       description: s.description ?? '',
       color: s.color ?? COLOR_OPTIONS[0],
     })
@@ -106,6 +115,7 @@ export default function SubjectsPage() {
     setShowModal(false)
     setEditingId(null)
     setForm(EMPTY_FORM)
+    if (openedFromHub) router.replace('/(app)/documents')
   }
 
   const handleSave = async () => {
@@ -119,6 +129,7 @@ export default function SubjectsPage() {
       const payload = {
         name,
         code: form.code.trim() || undefined,
+        semester: form.semester.trim() || undefined,
         description: form.description.trim() || undefined,
         color: form.color,
       }
@@ -132,6 +143,7 @@ export default function SubjectsPage() {
       setShowModal(false)
       setEditingId(null)
       setForm(EMPTY_FORM)
+      if (openedFromHub) router.replace('/(app)/documents')
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Could not save subject.'
       Alert.alert('Error', msg)
@@ -181,7 +193,6 @@ export default function SubjectsPage() {
               </View>
             </View>
             <View style={styles.headerActions}>
-              <ThemeToggle />
               <Pressable
                 onPress={openCreate}
                 style={({ pressed }) => [
@@ -310,6 +321,22 @@ export default function SubjectsPage() {
                 ]}
               />
 
+              <Text style={[styles.label, { color: C.textSecondary }]}>Semester</Text>
+              <TextInput
+                value={form.semester}
+                onChangeText={(v) => setForm((f) => ({ ...f, semester: v }))}
+                placeholder="e.g. Semester 1 - 2026"
+                placeholderTextColor={C.muted}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: C.cardElevated,
+                    borderColor: C.cardBorder,
+                    color: C.text,
+                  },
+                ]}
+              />
+
               <Text style={[styles.label, { color: C.textSecondary }]}>
                 Description
               </Text>
@@ -396,6 +423,9 @@ function SubjectRow({
           {item.code ? (
             <Text style={[styles.rowCode, { color: C.primary }]}>{item.code}</Text>
           ) : null}
+          {item.semester ? (
+            <Text style={[styles.rowCode, { color: C.muted }]}>{item.semester}</Text>
+          ) : null}
           {item.description ? (
             <Text
               style={[styles.rowDesc, { color: C.muted }]}
@@ -447,7 +477,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FontSize.xl,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   subtitle: { fontSize: FontSize.xs, fontWeight: '500', marginTop: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
@@ -470,7 +500,7 @@ const styles = StyleSheet.create({
   emptyIcon: {
     width: 72,
     height: 72,
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,

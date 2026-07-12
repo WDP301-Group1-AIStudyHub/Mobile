@@ -26,6 +26,8 @@ export interface ChatSource {
   semanticSectionLabel?: string
   contentPreview: string
   relevanceScore?: number
+  sourceStatus?: 'ACTIVE' | 'DELETED'
+  sourceDeletedAt?: string
 }
 
 // ── Request payloads ──────────────────────────────────────────────────────────
@@ -67,6 +69,8 @@ export interface ChatHistoryItem {
   evaluation?: RagEvaluation
   createdAt: string
   updatedAt: string
+  sourceStatus?: 'ACTIVE' | 'DELETED'
+  sourceDeletedAt?: string
 }
 
 export interface ChatHistoryListResponse {

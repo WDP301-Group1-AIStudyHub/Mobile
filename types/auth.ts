@@ -23,6 +23,7 @@ export interface AuthUser {
 export interface AuthResponse {
   user: AuthUser
   accessToken: string
+  redirectDocumentId?: string
 }
 
 export interface LoginPayload {
@@ -35,6 +36,7 @@ export interface RegisterPayload {
   email: string
   password: string
   avatar?: string
+  inviteToken?: string
 }
 
 export interface ForgotPasswordPayload {

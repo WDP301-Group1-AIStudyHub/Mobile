@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
-import { Tabs, router } from 'expo-router'
-import { LayoutDashboard, MessageCircle, User, FileText, FolderOpen, Brain } from 'lucide-react-native'
+import { Tabs, router, usePathname } from 'expo-router'
+import { LayoutDashboard, MessageCircle, User, FolderOpen, Brain } from 'lucide-react-native'
 import { View, StyleSheet, Platform, ActivityIndicator } from 'react-native'
 
 import { useColors } from '../../contexts/ThemeContext'
@@ -16,13 +16,24 @@ const tabIconStyles = StyleSheet.create({
   },
 })
 
-function TabIcon({ icon: Icon, focused }: { icon: typeof LayoutDashboard; focused: boolean }) {
+function TabIcon({
+  icon: Icon,
+  focused,
+}: {
+  icon: typeof LayoutDashboard
+  focused: boolean
+}) {
   const C = useColors()
   return (
-    <View style={[tabIconStyles.iconWrap, focused && { backgroundColor: C.primary }]}>
+    <View
+      style={[
+        tabIconStyles.iconWrap,
+        focused && { backgroundColor: C.primaryDim },
+      ]}
+    >
       <Icon
-        size={19}
-        color={focused ? '#fff' : (C.background === 'transparent' ? '#000000' : C.muted)}
+        size={20}
+        color={focused ? C.primary : C.muted}
         strokeWidth={focused ? 2.2 : 2.5}
       />
     </View>
@@ -31,26 +42,18 @@ function TabIcon({ icon: Icon, focused }: { icon: typeof LayoutDashboard; focuse
 
 export default function AppLayout() {
   const C = useColors()
-  const { state, signOut } = useAuth()
-
-  // Safety net: if we are still in 'loading' state after 5s, the auth check
-  // is hung (e.g. backend unreachable). Force-clear the session and redirect
-  // to login so the user is not stuck on a spinner.
-  useEffect(() => {
-    if (state.status !== 'loading') return
-    const t = setTimeout(() => {
-      console.warn('[app/_layout] auth loading timeout, forcing unauth')
-      signOut()
-    }, 5000)
-    return () => clearTimeout(t)
-  }, [state.status, signOut])
+  const { state } = useAuth()
+  const pathname = usePathname()
 
   // Auth guard: redirect to login if not authenticated
   useEffect(() => {
     if (state.status === 'unauthenticated') {
-      router.replace('/(auth)/login')
+      router.replace({
+        pathname: '/(auth)/login',
+        params: pathname && pathname !== '/' ? { returnTo: pathname } : undefined,
+      })
     }
-  }, [state.status])
+  }, [pathname, state.status])
 
   const styles = useMemo(() => StyleSheet.create({
     tabBar: {
@@ -60,16 +63,12 @@ export default function AppLayout() {
       height: Platform.OS === 'ios' ? 88 : 82,
       paddingBottom: Platform.OS === 'ios' ? 26 : 18,
       paddingTop: 7,
-      shadowColor: C.cardShadowColor,
-      shadowOffset: { width: 0, height: -4 },
-      shadowOpacity: 0.12,
-      shadowRadius: 20,
-      elevation: 16,
+      boxShadow: '0 -1px 4px rgba(16, 24, 20, 0.06)',
     },
     tabLabel: {
       fontSize: 10,
-      fontWeight: '800',
-      letterSpacing: 0.2,
+      fontWeight: '700',
+      letterSpacing: 0,
       marginTop: 0,
     },
     tabItem: {
@@ -99,32 +98,21 @@ export default function AppLayout() {
         tabBarInactiveTintColor: C.background === 'transparent' ? '#000000' : C.muted,
       }}
     >
-      {/* Documents - shows subjects and their documents */}
-      <Tabs.Screen
-        name="documents"
-        options={{
-          title: 'Documents',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon icon={FileText} focused={focused} />
-          ),
-        }}
-      />
-      {/* Subjects - manage subjects */}
-      <Tabs.Screen
-        name="subjects"
-        options={{
-          title: 'Subjects',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon icon={FolderOpen} focused={focused} />
-          ),
-        }}
-      />
       <Tabs.Screen
         name="dashboard"
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ focused }) => (
             <TabIcon icon={LayoutDashboard} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="documents"
+        options={{
+          title: 'Documents',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon={FolderOpen} focused={focused} />
           ),
         }}
       />
@@ -145,6 +133,10 @@ export default function AppLayout() {
             <TabIcon icon={Brain} focused={focused} />
           ),
         }}
+      />
+      <Tabs.Screen
+        name="subjects"
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="benchmarks"

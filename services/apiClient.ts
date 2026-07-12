@@ -2,6 +2,30 @@ import axios from 'axios'
 import { Platform } from 'react-native'
 import { clearAuthSession, getStoredToken } from './authStorage'
 
+export interface ApiErrorDetails {
+  status?: number
+  code?: string
+  message: string
+}
+
+export function getApiErrorDetails(error: unknown): ApiErrorDetails {
+  if (!axios.isAxiosError(error)) {
+    return { message: error instanceof Error ? error.message : 'Something went wrong.' }
+  }
+
+  const payload = error.response?.data as
+    | { message?: string; error?: string; code?: string }
+    | undefined
+  const message =
+    payload?.message ||
+    payload?.error ||
+    (error.code === 'ECONNABORTED'
+      ? 'The server took too long to respond. Please try again.'
+      : error.message || 'Unable to reach the server.')
+
+  return { status: error.response?.status, code: payload?.code, message }
+}
+
 const configuredApiBaseUrl =
   process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/+$/, '') || 'https://backendd-vn1j.onrender.com'
 
@@ -38,6 +62,7 @@ apiClient.interceptors.response.use(
     } catch {
       // Bỏ qua lỗi khi xoá session — không để crash app
     }
+    if (error instanceof Error) error.message = getApiErrorDetails(error).message
     return Promise.reject(error)
   },
 )

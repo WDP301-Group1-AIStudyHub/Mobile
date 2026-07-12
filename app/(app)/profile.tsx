@@ -18,25 +18,23 @@ import {
   Settings,
   Shield,
   Sparkles,
-  Sun,
   User,
 } from 'lucide-react-native'
 import Card from '../../components/ui/Card'
-import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
-import { useColors, useTheme } from '../../contexts/ThemeContext'
+import { useColors } from '../../contexts/ThemeContext'
 import { useAuth } from '../../hooks/useAuth'
 import { listChatHistory } from '../../services/chatApi'
 import { listDocuments } from '../../services/documentApi'
 import { listSubjects } from '../../services/subjectApi'
+import { normalizeAccessibleDocuments } from '../../utils/accessibleDocuments'
 
-type MenuKey = 'profile' | 'password' | 'notifications' | 'theme' | 'subjects' | 'model' | 'security' | 'settings'
+type MenuKey = 'profile' | 'password' | 'notifications' | 'subjects' | 'model' | 'security' | 'settings'
 
 export default function ProfilePage() {
   const { state, signOut } = useAuth()
   const [signingOut, setSigningOut] = useState(false)
   const C = useColors()
-  const { isDark, toggle } = useTheme()
   const [stats, setStats] = useState({ documents: 0, chats: 0, subjects: 0 })
 
   const user = state.status === 'authenticated' ? state.user : null
@@ -52,7 +50,7 @@ export default function ProfilePage() {
     ]).then(([documents, chats, subjects]) => {
       if (!active) return
       setStats({
-        documents: documents.length,
+        documents: normalizeAccessibleDocuments(documents).length,
         chats: chats.total || chats.histories.length,
         subjects: subjects.length,
       })
@@ -76,7 +74,6 @@ export default function ProfilePage() {
     {
       title: 'Preferences',
       items: [
-        { icon: Sun, label: isDark ? 'Light Mode' : 'Dark Mode', key: 'theme' as MenuKey, color: C.info },
         { icon: BookOpen, label: 'My Subjects', key: 'subjects' as MenuKey, color: C.accentTeal },
         { icon: Sparkles, label: 'AI Model', key: 'model' as MenuKey, color: C.accent },
       ],
@@ -90,15 +87,15 @@ export default function ProfilePage() {
     }
     ]
     return sections
-  }, [C, isDark, user?.role])
+  }, [C, user?.role])
 
   const styles = useMemo(() => StyleSheet.create({
     safe: { flex: 1, backgroundColor: C.background },
     content: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 96, gap: Spacing.lg },
-    pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
+    pageTitle: { fontSize: FontSize.xxl, fontWeight: '800', color: C.text, letterSpacing: 0 },
     profileCard: {
       backgroundColor: C.card, borderWidth: 1, borderColor: C.cardBorder,
-      borderRadius: 20, padding: Spacing.lg, flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+      borderRadius: Radius.lg, padding: Spacing.lg, flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
     },
     avatarContainer: { flexShrink: 0 },
     avatarRing: { width: 70, height: 70, borderRadius: 35, alignItems: 'center', justifyContent: 'center', padding: 3, backgroundColor: C.primary },
@@ -118,7 +115,7 @@ export default function ProfilePage() {
     editChipText: { fontSize: FontSize.xs, color: C.primaryLight, fontWeight: '600' },
     statsRow: {
       flexDirection: 'row', backgroundColor: C.card, borderWidth: 1,
-      borderColor: C.cardBorder, borderRadius: 16, overflow: 'hidden',
+      borderColor: C.cardBorder, borderRadius: Radius.lg, overflow: 'hidden',
     },
     statItem: {
       flex: 1, alignItems: 'center', paddingVertical: Spacing.md, gap: 4,
@@ -143,7 +140,7 @@ export default function ProfilePage() {
     divider: { height: 1, backgroundColor: C.cardBorder, marginLeft: 68 },
     signOutBtn: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-      backgroundColor: C.errorDim, borderWidth: 1, borderColor: C.error, borderRadius: 14, paddingVertical: Spacing.md,
+      backgroundColor: C.errorDim, borderWidth: 1, borderColor: C.error, borderRadius: Radius.lg, paddingVertical: Spacing.md,
     },
     signOutText: { fontSize: FontSize.sm, fontWeight: '600', color: C.error },
     version: { textAlign: 'center', fontSize: FontSize.xs, color: C.muted },
@@ -157,8 +154,6 @@ export default function ProfilePage() {
       router.push(`${basePath}/edit-profile` as any)
     } else if (key === 'password') {
       router.push(`${basePath}/change-password` as any)
-    } else if (key === 'theme') {
-      toggle()
     } else if (key === 'subjects') {
       if (user?.role !== 'admin') {
         router.push('/(app)/subjects')
@@ -195,10 +190,7 @@ export default function ProfilePage() {
           showsVerticalScrollIndicator={false}
         >
           {/* Header */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={styles.pageTitle}>Profile</Text>
-            <ThemeToggle size={38} />
-          </View>
+          <Text style={styles.pageTitle}>Profile</Text>
 
           {/* Avatar & Info */}
           <View style={styles.profileCard}>

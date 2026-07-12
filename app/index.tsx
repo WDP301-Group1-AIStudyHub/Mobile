@@ -8,16 +8,6 @@ export default function Index() {
   const { state, signOut } = useAuth()
   const C = useColors()
 
-  // Safety net: 5s loading timeout so users aren't stuck on splash
-  useEffect(() => {
-    if (state.status !== 'loading') return
-    const t = setTimeout(() => {
-      console.warn('[index] auth loading timeout, forcing unauth')
-      signOut()
-    }, 5000)
-    return () => clearTimeout(t)
-  }, [state.status, signOut])
-
   useEffect(() => {
     if (state.status === 'authenticated') {
       if (state.user.role === 'admin') {

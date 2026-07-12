@@ -94,6 +94,8 @@ export interface ChatThreadItem {
   documentId?: string
   documentIds?: string[]
   mode?: string
+  sourceStatus?: 'ACTIVE' | 'DELETED'
+  sourceDeletedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -113,6 +115,8 @@ export interface ChatThreadMessage {
   subjectId?: string
   scope: string
   mode: string
+  sourceStatus?: 'ACTIVE' | 'DELETED'
+  sourceDeletedAt?: string
   createdAt: string
   updatedAt: string
 }

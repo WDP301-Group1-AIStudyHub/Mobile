@@ -101,17 +101,7 @@ function AdminHeader() {
 
 export default function AdminLayout() {
   const C = useColors()
-  const { state, signOut } = useAuth()
-
-  // Safety net: 5s loading timeout
-  useEffect(() => {
-    if (state.status !== 'loading') return
-    const t = setTimeout(() => {
-      console.warn('[admin/_layout] auth loading timeout, forcing unauth')
-      signOut()
-    }, 5000)
-    return () => clearTimeout(t)
-  }, [state.status, signOut])
+  const { state } = useAuth()
 
   // Auth guard: redirect to login if not authenticated
   useEffect(() => {

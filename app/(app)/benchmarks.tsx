@@ -22,7 +22,6 @@ import {
   X,
 } from 'lucide-react-native'
 import BrandLogo from '../../components/ui/BrandLogo'
-import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
 import {
@@ -469,7 +468,6 @@ export default function BenchmarksPage() {
           <View style={styles.topBar}>
             <BrandLogo size={28} />
             <View style={styles.topBarRight}>
-              <ThemeToggle />
             </View>
           </View>
 
