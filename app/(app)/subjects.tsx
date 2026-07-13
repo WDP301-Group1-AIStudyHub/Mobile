@@ -413,6 +413,7 @@ function SubjectRow({
   onOpen: (s: SubjectItem) => void
 }) {
   const C = useColors()
+  const canManage = item.currentUserRole === 'OWNER' || item.currentUserRole === 'ADMIN'
   return (
     <Card>
       <View style={styles.row}>
@@ -437,8 +438,15 @@ function SubjectRow({
               {item.description}
             </Text>
           ) : null}
+          <View style={styles.workspaceMeta}>
+            <Text style={[styles.roleBadge, { backgroundColor: C.primaryDim, color: C.primary }]}>{item.currentUserRole || 'NO ACCESS'}</Text>
+            <Text style={[styles.countMeta, { color: C.textSecondary }]}>{item.documentCount ?? 0} docs</Text>
+            <Text style={[styles.countMeta, { color: C.textSecondary }]}>{item.memberCount ?? 0} members</Text>
+            <Text style={[styles.countMeta, { color: C.textSecondary }]}>{item.teamCount ?? 0} teams</Text>
+          </View>
+          {item.updatedAt ? <Text style={[styles.updatedMeta, { color: C.muted }]}>Updated {new Date(item.updatedAt).toLocaleDateString()}</Text> : null}
         </Pressable>
-        <View style={styles.rowActions}>
+        {canManage ? <View style={styles.rowActions}>
           <Pressable
             onPress={() => onEdit(item)}
             hitSlop={8}
@@ -453,7 +461,7 @@ function SubjectRow({
           >
             <Trash2 size={16} color={C.error} />
           </Pressable>
-        </View>
+        </View> : null}
       </View>
     </Card>
   )
@@ -517,6 +525,10 @@ const styles = StyleSheet.create({
   rowCode: { fontSize: FontSize.xs, fontWeight: '600', marginTop: 2 },
   rowSemester: { fontSize: FontSize.xs, fontWeight: '500', marginTop: 2 },
   rowDesc: { fontSize: FontSize.xs, marginTop: 4 },
+  workspaceMeta: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: Spacing.sm },
+  roleBadge: { borderRadius: Radius.full, fontSize: FontSize.xs, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4 },
+  countMeta: { fontSize: FontSize.xs, fontWeight: '600' },
+  updatedMeta: { fontSize: FontSize.xs, marginTop: 6 },
   rowActions: { flexDirection: 'row', gap: 4 },
   iconBtn: { padding: 8, borderRadius: Radius.sm },
   pressed: { opacity: 0.6 },

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -17,7 +17,6 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
-  FolderPlus,
   FolderOpen,
   Globe,
   Layers,
@@ -39,7 +38,7 @@ import {
   Users,
 } from 'lucide-react-native'
 import * as DocumentPicker from 'expo-document-picker'
-import { router, useFocusEffect } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import Card from '../../components/ui/Card'
 import Input from '../../components/ui/Input'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
@@ -107,6 +106,8 @@ function fileTypeColor(type: string | undefined, C: ReturnType<typeof useColors>
 
 export default function DocumentsPage() {
   const C = useColors()
+  const { upload: uploadParam, subjectId: uploadSubjectId } = useLocalSearchParams<{ upload?: string; subjectId?: string }>()
+  const autoUploadHandled = useRef(false)
   const { state } = useAuth()
   const currentUser = state.status === 'authenticated' ? state.user : null
   const [docs, setDocs] = useState<DocumentItem[]>([])
@@ -342,6 +343,12 @@ export default function DocumentsPage() {
     setUploadProgress(0)
     setShowUpload(true)
   }
+
+  useEffect(() => {
+    if (uploadParam !== '1' || autoUploadHandled.current || subjects.length === 0) return
+    autoUploadHandled.current = true
+    openUpload(subjects.find((subject) => getSafeId(subject) === uploadSubjectId))
+  }, [subjects, uploadParam, uploadSubjectId])
 
   const closeUpload = () => {
     if (uploading) return
@@ -615,22 +622,20 @@ export default function DocumentsPage() {
           {libraryView === 'mine' ? (
           <View style={styles.primaryActions}>
             <Pressable
-              accessibilityLabel="Create subject"
-              onPress={() =>
-                router.push({ pathname: '/(app)/subjects', params: { create: '1' } })
-              }
+              accessibilityLabel="Open subject workspaces"
+              onPress={() => router.push('/(app)/subjects')}
               style={({ pressed }) => [
                 styles.actionButton,
                 { backgroundColor: C.cardElevated, borderColor: C.primary },
                 pressed && styles.pressed,
               ]}
             >
-              <FolderPlus size={17} color={C.primary} />
+              <FolderOpen size={17} color={C.primary} />
               <Text
                 numberOfLines={1}
                 style={[styles.actionButtonText, { color: C.primary }]}
               >
-                New subject
+                Workspaces
               </Text>
             </Pressable>
             <Pressable
@@ -927,8 +932,15 @@ export default function DocumentsPage() {
                   <Card key={safeGroupKey} style={styles.subjectCard}>
                     <View style={styles.subjectHeader}>
                       <Pressable
+                        accessibilityLabel={isUncategorized ? 'Expand uncategorized documents' : `Open ${g.subject.name} workspace`}
                         style={styles.subjectHeaderLeft}
-                        onPress={() => toggleExpand(groupId)}
+                        onPress={() => {
+                          if (isUncategorized) {
+                            toggleExpand(groupId)
+                            return
+                          }
+                          router.push(`/(app)/subject/${groupId}` as any)
+                        }}
                       >
                         <View
                           style={[
@@ -970,6 +982,7 @@ export default function DocumentsPage() {
                       <View style={styles.subjectHeaderRight}>
                         {!isUncategorized ? (
                           <Pressable
+                            accessibilityLabel={`Upload document to ${g.subject.name}`}
                             onPress={() => openUpload(g.subject)}
                             hitSlop={8}
                             style={({ pressed }) => [
@@ -981,6 +994,7 @@ export default function DocumentsPage() {
                           </Pressable>
                         ) : null}
                         <Pressable
+                          accessibilityLabel={isOpen ? `Collapse ${g.subject.name}` : `Expand ${g.subject.name}`}
                           onPress={() => toggleExpand(groupId)}
                           hitSlop={8}
                           style={styles.pressed}

@@ -103,6 +103,7 @@ export interface DocumentItem {
     color?: string
     semester?: string
   } | null
+  shareContext?: 'SUBJECT_WORKSPACE' | 'PERSONAL_SHARE'
   isStarred?: boolean
   starredAt?: string | null
 }

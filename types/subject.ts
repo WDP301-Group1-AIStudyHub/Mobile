@@ -10,6 +10,7 @@ export interface SubjectItem {
   memberCount?: number
   teamCount?: number
   currentUserRole?: SubjectWorkspaceRole | null
+  currentUserTeams?: Array<{ id: string; name: string }>
   createdAt: string
   updatedAt: string
 }
@@ -49,10 +50,13 @@ export interface SubjectMember {
   role: SubjectWorkspaceRole
   user: SubjectWorkspaceUser
   status?: 'ACTIVE' | 'PENDING'
+  teamId?: string
   teamIds?: string[]
   teamNames?: string[]
+  expiresAt?: string
   createdAt: string
   updatedAt: string
+  notificationStatus?: 'ACCEPTED' | 'FAILED' | 'SKIPPED'
 }
 
 export interface SubjectTeam {
@@ -64,6 +68,7 @@ export interface SubjectTeam {
   pendingMembers?: SubjectWorkspaceUser[]
   createdAt: string
   updatedAt: string
+  notificationStatus?: 'ACCEPTED' | 'FAILED' | 'SKIPPED'
 }
 
 export interface SubjectAccessGrant {

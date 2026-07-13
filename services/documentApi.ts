@@ -22,34 +22,37 @@ function normalizeSubjectId(value: unknown): string | undefined {
   return undefined
 }
 
+function normalizeSubject(value: unknown): DocumentItem['personalSubject'] {
+  if (!value || typeof value !== 'object') return null
+  const subject = value as Record<string, unknown>
+  const id = normalizeSubjectId(value)
+  if (!id || typeof subject.name !== 'string') return null
+  return {
+    _id: id,
+    id,
+    name: subject.name,
+    code: typeof subject.code === 'string' ? subject.code : undefined,
+    color: typeof subject.color === 'string' ? subject.color : undefined,
+    semester: typeof subject.semester === 'string' ? subject.semester : undefined,
+  }
+}
+
 function normalizeDoc(doc: DocumentItem): DocumentItem {
   const raw = doc as DocumentItem & {
     subjectId?: unknown
     personalSubjectId?: unknown
     extractedText?: string
   }
-  const personalSubject = raw.personalSubject ?? null
-  const sid = normalizeSubjectId(raw.personalSubjectId) || normalizeSubjectId(raw.subjectId)
-  // `raw.subject` may be a populated object { _id, name, ... } from MongoDB.
-  // Extract the name string so every consumer receives a safe `subject: string`.
-  const subjectStr: string | undefined = (() => {
-    if (personalSubject && typeof personalSubject === 'object') {
-      const n = (personalSubject as Record<string, unknown>).name
-      if (typeof n === 'string' && n.length > 0) return n
-    }
-    const s = raw.subject as unknown
-    if (!s) return undefined
-    if (typeof s === 'string') return s
-    if (typeof s === 'object' && s !== null) {
-      const n = (s as Record<string, unknown>).name
-      if (typeof n === 'string' && n.length > 0) return n
-    }
-    return undefined
-  })()
+  const personalSubject = normalizeSubject(raw.personalSubject)
+  const workspaceSubject = normalizeSubject(raw.subject) || normalizeSubject(raw.subjectId)
+  const resolvedSubject = raw.shareContext === 'SUBJECT_WORKSPACE'
+    ? workspaceSubject
+    : personalSubject || workspaceSubject
+
   return {
     ...raw,
-    subjectId: sid,
-    subject: subjectStr,
+    subjectId: resolvedSubject?._id || normalizeSubjectId(raw.subjectId),
+    subject: resolvedSubject || (typeof raw.subject === 'string' ? raw.subject : undefined),
     personalSubjectId: normalizeSubjectId(raw.personalSubjectId),
     personalSubject,
   }
