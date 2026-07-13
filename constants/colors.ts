@@ -1,48 +1,43 @@
 // Clean color palette - no gradients, solid colors only
 export const LightColors = {
-  // Backgrounds
-  background: '#f7f8f1', // moon-paper
-  backgroundTop: '#f7f8f1',
-  backgroundMid: '#f7f8f1',
-  backgroundBottom: '#f7f8f1',
-  card: '#fffdf7', // paper
-  cardBorder: '#d5dfd0', // border
+  background: '#ffffff',
+  backgroundTop: '#ffffff',
+  backgroundMid: '#ffffff',
+  backgroundBottom: '#ffffff',
+  card: '#ffffff',
+  cardBorder: '#e1e6e2',
   cardElevated: '#ffffff',
-  cardShadowColor: 'rgba(73, 107, 85, 0.1)', // shadow-soft
+  cardShadowColor: 'rgba(16, 24, 20, 0.06)',
 
-  // Brand colors
-  primary: '#496b55', // moss
-  primaryLight: '#638f74', // accent-teal
-  primaryDim: 'rgba(73, 107, 85, 0.1)',
-  secondary: '#eef6f1', // lichen/dew
-  secondaryDim: 'rgba(238, 246, 241, 0.5)',
-  accent: '#dce7d4', // sage
-  accentDim: 'rgba(220, 231, 212, 0.2)',
-  accentTeal: '#6f9b9b', // accent-cyan
-  accentTealDim: 'rgba(111, 155, 155, 0.1)',
-  accentGold: '#9a7a3d', // accent-gold
-  accentGoldDim: 'rgba(154, 122, 61, 0.1)',
-  accentCoral: '#b8876c', // clay
+  primary: '#2f6b4f',
+  primaryLight: '#3f7f61',
+  primaryDim: '#eaf3ee',
+  secondary: '#f2f5f3',
+  secondaryDim: '#f7f8f7',
+  accent: '#eaf3ee',
+  accentDim: '#f4f8f5',
+  accentTeal: '#287f78',
+  accentTealDim: '#e8f5f3',
+  accentGold: '#9a6700',
+  accentGoldDim: '#fff7db',
+  accentCoral: '#b42318',
 
-  // Text
-  text: '#263126', // bark
-  textSecondary: '#617064', // muted-foreground
-  muted: '#88968b', // readable muted text
-  mutedLight: '#a6b4a9', // readable lighter muted text
+  text: '#17201a',
+  textSecondary: '#455249',
+  muted: '#5f6b63',
+  mutedLight: '#7b867f',
 
-  // Semantic
-  success: '#527267', // accent-sapphire
-  successDim: 'rgba(82, 114, 103, 0.1)',
-  error: '#9f5d55', // berry
-  errorDim: 'rgba(159, 93, 85, 0.1)',
-  warning: '#9a7a3d',
-  warningDim: 'rgba(154, 122, 61, 0.1)',
-  info: '#6f9b9b',
-  infoDim: 'rgba(111, 155, 155, 0.1)',
+  success: '#267a4f',
+  successDim: '#e9f6ef',
+  error: '#b42318',
+  errorDim: '#fff1f0',
+  warning: '#9a6700',
+  warningDim: '#fff7db',
+  info: '#276b9b',
+  infoDim: '#edf6fc',
 
-  // Overlay
-  overlay: 'rgba(247, 248, 241, 0.6)',
-  overlayDark: 'rgba(38, 49, 38, 0.2)', // bark 20%
+  overlay: 'rgba(255, 255, 255, 0.82)',
+  overlayDark: 'rgba(23, 32, 26, 0.35)',
 }
 
 // Dark mode palette
@@ -105,9 +100,9 @@ export const Spacing = {
 
 export const Radius = {
   sm: 6,
-  md: 10,
-  lg: 14,
-  xl: 20,
+  md: 8,
+  lg: 10,
+  xl: 12,
   full: 9999,
 }
 

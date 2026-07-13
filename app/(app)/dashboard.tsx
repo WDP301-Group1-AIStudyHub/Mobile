@@ -16,13 +16,13 @@ import {
 } from 'lucide-react-native'
 import Card from '../../components/ui/Card'
 import BrandLogo from '../../components/ui/BrandLogo'
-import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
 import { listDocuments } from '../../services/documentApi'
 import { listSubjects } from '../../services/subjectApi'
 import type { DocumentItem } from '../../types/document'
 import type { SubjectItem } from '../../types/subject'
+import { getAccessibleSubject, normalizeAccessibleDocuments } from '../../utils/accessibleDocuments'
 
 const STORAGE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024 // 10 GB
 
@@ -89,7 +89,7 @@ export default function DashboardPage() {
         listDocuments(),
         listSubjects().catch(() => [] as SubjectItem[]),
       ])
-      setDocs(Array.isArray(docsRes) ? docsRes : [])
+      setDocs(normalizeAccessibleDocuments(docsRes))
       setSubjects(Array.isArray(subsRes) ? subsRes : [])
     } catch (err: any) {
       // 401 means the auth token is missing or invalid — auth guard will redirect.
@@ -123,7 +123,7 @@ export default function DashboardPage() {
   const subjectsWithCount = useMemo(() => {
     const counts = new Map<string, number>()
     for (const d of docs) {
-      const key = d.subjectId || getSubjectName(d.subject, '') || 'Uncategorized'
+      const key = d.personalSubjectId || d.subjectId || getSubjectName(getAccessibleSubject(d), '') || 'Uncategorized'
       counts.set(key, (counts.get(key) || 0) + 1)
     }
     return subjects
@@ -155,7 +155,7 @@ export default function DashboardPage() {
       alignItems: 'center', justifyContent: 'center',
     },
     pageHeader: { gap: 4 },
-    pageTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
+    pageTitle: { fontSize: FontSize.xxl, fontWeight: '800', color: C.text, letterSpacing: 0 },
     pageSubtitle: { fontSize: FontSize.sm, color: C.muted, lineHeight: 20 },
     storageCard: {
       backgroundColor: C.card, borderRadius: Radius.lg, borderWidth: 1,
@@ -169,15 +169,13 @@ export default function DashboardPage() {
       alignItems: 'center', justifyContent: 'center',
     },
     storageLabel: { fontSize: FontSize.xs, fontWeight: '700', color: C.muted, letterSpacing: 1.5 },
-    storageValue: { fontSize: FontSize.xxxl, fontWeight: '300', color: C.text, letterSpacing: -1, marginTop: Spacing.lg },
+    storageValue: { fontSize: FontSize.xxl, fontWeight: '800', color: C.text, letterSpacing: 0, marginTop: Spacing.sm },
     storageCaption: { fontSize: FontSize.xs, color: C.muted, marginTop: 2 },
     storageBarTrack: { height: 4, borderRadius: 2, backgroundColor: C.cardBorder, marginTop: Spacing.md, overflow: 'hidden' },
     storageBarFill: { height: 4, borderRadius: 2, backgroundColor: C.accentTeal, width: `${storagePct}%` },
     aiCard: {
       backgroundColor: C.primary, borderRadius: Radius.lg,
       padding: Spacing.lg, gap: Spacing.md,
-      shadowColor: C.primary, shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.2, shadowRadius: 12, elevation: 4,
     },
     aiBadge: {
       flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -185,7 +183,7 @@ export default function DashboardPage() {
       paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.full,
     },
     aiBadgeText: { fontSize: FontSize.xs, fontWeight: '700', color: '#fff', letterSpacing: 1.2 },
-    aiTitle: { fontSize: FontSize.xl, fontWeight: '300', color: '#fff', lineHeight: 28, letterSpacing: -0.2, flex: 1 },
+    aiTitle: { fontSize: FontSize.md, fontWeight: '700', color: '#fff', lineHeight: 23, letterSpacing: 0, flex: 1 },
     aiActions: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap', alignItems: 'center' },
     aiBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -236,7 +234,7 @@ export default function DashboardPage() {
     statsRow: { flexDirection: 'row', gap: Spacing.sm },
     statCard: { flex: 1, alignItems: 'center', gap: 5, backgroundColor: C.card, borderRadius: Radius.lg, padding: Spacing.md },
     statIconWrap: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
-    statValue: { fontSize: FontSize.xl, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
+    statValue: { fontSize: FontSize.xl, fontWeight: '800', color: C.text, letterSpacing: 0 },
     statLabel: { fontSize: FontSize.xs, color: C.muted, fontWeight: '500' },
     recentCard: {
       backgroundColor: C.card, borderRadius: Radius.lg, borderWidth: 1,
@@ -328,7 +326,6 @@ export default function DashboardPage() {
           <View style={styles.topBar}>
             <BrandLogo size={32} />
             <View style={styles.topBarRight}>
-              <ThemeToggle size={38} />
               <Pressable style={styles.iconBtn}>
                 <Bell size={19} color={C.textSecondary} strokeWidth={1.8} />
               </Pressable>
@@ -338,7 +335,7 @@ export default function DashboardPage() {
           {/* Page header */}
           <View style={styles.pageHeader}>
             <Text style={styles.pageTitle}>Dashboard</Text>
-            <Text style={styles.pageSubtitle}>Your scholarly universe, synchronized.</Text>
+            <Text style={styles.pageSubtitle}>Manage documents, study sets, and recent activity.</Text>
           </View>
 
           {/* Storage card */}
@@ -362,7 +359,7 @@ export default function DashboardPage() {
           <View style={styles.aiCard}>
             <View style={styles.aiBadge}>
               <Sparkles size={11} color="#fff" />
-              <Text style={styles.aiBadgeText}>ZENITH INTELLIGENCE</Text>
+              <Text style={styles.aiBadgeText}>AI CHAT</Text>
             </View>
             <Text style={styles.aiTitle}>
               Chat with your documents using AI-powered search and summarization.
@@ -444,7 +441,7 @@ export default function DashboardPage() {
             ) : (
               recentDocs.map((doc, i) => {
                 const color = fileTypeColor(doc.fileType, C)
-                const subjectLabel = getSubjectName(doc.subject, '')
+                const subjectLabel = getSubjectName(getAccessibleSubject(doc), '')
                 return (
                   <Pressable
                     key={doc.id}
@@ -519,10 +516,10 @@ export default function DashboardPage() {
               <View style={[styles.shortcutCard, pressed && { opacity: 0.8 }]}>
                 <View style={{ gap: 3 }}>
                   <Text style={{ fontSize: FontSize.base, fontWeight: '600', color: C.text }}>
-                    Sync Documents
+                    Manage Documents
                   </Text>
                   <Text style={{ fontSize: FontSize.xs, color: C.muted }}>
-                    Upload new files to your library
+                    Upload, organize, share, and recover files
                   </Text>
                 </View>
                 <View style={styles.shortcutIcon}>

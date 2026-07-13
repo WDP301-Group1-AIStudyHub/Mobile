@@ -41,6 +41,7 @@ import {
 import { listDocuments } from '../../../services/documentApi'
 import type { AskPayload } from '../../../types/chat'
 import type { DocumentItem } from '../../../types/document'
+import { normalizeAccessibleDocuments } from '../../../utils/accessibleDocuments'
 import {
   getDocumentSubjectId,
   getDocumentSubjectKey,
@@ -112,8 +113,9 @@ export default function ChatIndexPage() {
     try {
       const list = await listDocuments()
       if (!isMountedRef.current) return
-      setDocs(Array.isArray(list) ? list : [])
-      const groups = groupDocsBySemester(Array.isArray(list) ? list : [])
+      const accessible = normalizeAccessibleDocuments(list)
+      setDocs(accessible)
+      const groups = groupDocsBySemester(accessible)
       setExpandedSemesters(new Set(groups.map((group) => group.label)))
       setExpandedSubjects(new Set(groups.flatMap((group) => group.subjects.map((subject) => `${group.label}::${subject.key}`))))
     } catch {
@@ -621,7 +623,9 @@ export default function ChatIndexPage() {
                                             <FileText size={15} color={selected ? C.primary : C.muted} />
                                             <View style={S.docRowInfo}>
                                               <Text style={S.docTitle} numberOfLines={1}>{doc.title}</Text>
-                                              <Text style={S.docMeta} numberOfLines={1}>{doc.fileName}</Text>
+                                              <Text style={S.docMeta} numberOfLines={1}>
+                                                {doc.isShared ? `${doc.accessRole === 'EDITOR' ? 'Editor' : 'Viewer'} · ` : 'Owner · '}{doc.fileName}
+                                              </Text>
                                             </View>
                                           </Pressable>
                                         )

@@ -21,7 +21,11 @@ export interface StudyMaterial {
   _id: string
   title: string
   userId: string
-  documentId: string
+  documentId?: string | null
+  sourceDocumentId?: string
+  sourceDocumentTitle?: string
+  sourceStatus?: 'ACTIVE' | 'DELETED'
+  sourceDeletedAt?: string | null
   type: MaterialType
   status: MaterialStatus
   error?: string

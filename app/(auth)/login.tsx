@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react-native'
 import Button from '../../components/ui/Button'
@@ -22,7 +22,13 @@ import { login } from '../../services/authApi'
 export default function LoginPage() {
   const C = useColors()
   const { signIn } = useAuth()
-  const [form, setForm] = useState({ email: '', password: '' })
+  const params = useLocalSearchParams<{ email?: string; returnTo?: string }>()
+  const initialEmail = typeof params.email === 'string' ? params.email : ''
+  const returnTo =
+    typeof params.returnTo === 'string' && params.returnTo.startsWith('/')
+      ? params.returnTo
+      : ''
+  const [form, setForm] = useState({ email: initialEmail, password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -39,6 +45,8 @@ export default function LoginPage() {
       signIn(user)
       if (user.role === 'admin') {
         router.replace('/admin')
+      } else if (returnTo) {
+        router.replace(returnTo as any)
       } else {
         router.replace('/(app)/dashboard')
       }
@@ -68,19 +76,14 @@ export default function LoginPage() {
   logoIcon: {
     width: 44,
     height: 44,
-    borderRadius: 13,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
   },
   logoText: {
     fontSize: FontSize.lg,
-    fontWeight: '700',
+    fontWeight: '800',
     color: C.text,
     letterSpacing: 0.5,
   },
@@ -92,7 +95,7 @@ export default function LoginPage() {
     fontSize: FontSize.xxl,
     fontWeight: '700',
     color: C.text,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   subtitle: {
     fontSize: FontSize.sm,
@@ -101,16 +104,11 @@ export default function LoginPage() {
   },
   card: {
     backgroundColor: C.cardElevated,
-    borderRadius: 22,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: C.cardBorder,
     padding: Spacing.lg,
     gap: 0,
-    shadowColor: C.cardShadowColor,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 8,
   },
   errorBox: {
     backgroundColor: C.errorDim,

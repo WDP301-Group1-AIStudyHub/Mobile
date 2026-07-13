@@ -6,11 +6,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
   Linking
 } from 'react-native'
+import * as DocumentPicker from 'expo-document-picker'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, router } from 'expo-router'
 import {
@@ -32,20 +34,32 @@ import {
   ChevronDown,
   ChevronRight,
   AlignLeft,
-  ExternalLink,
   Edit2,
   Trash2,
   X,
   Check,
+  Share2,
+  Star,
+  UploadCloud,
 } from 'lucide-react-native'
 import Card from '../../../components/ui/Card'
-import ThemeToggle from '../../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../../constants/colors'
 import { useColors } from '../../../contexts/ThemeContext'
-import { deleteDocument, getDocument, updateDocument } from '../../../services/documentApi'
+import {
+  deleteDocument,
+  getDocument,
+  getDocumentDownloadUrl,
+  getDocumentVersions,
+  setDocumentStar,
+  updateDocument,
+  updateDocumentVersion,
+} from '../../../services/documentApi'
 import { listSubjects } from '../../../services/subjectApi'
 import type { DocumentItem, DocumentVisibility } from '../../../types/document'
 import type { SubjectItem } from '../../../types/subject'
+import DocumentShareSheet from '../../../components/documents/document-share-sheet'
+import SharedDocumentSubjectSheet from '../../../components/documents/shared-document-subject-sheet'
+import { useAuth } from '../../../hooks/useAuth'
 
 const getSafeId = (item: unknown): string => {
   if (!item || typeof item !== 'object') return ''
@@ -113,6 +127,9 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexShrink: 1,
+    flexWrap: 'wrap',
     gap: Spacing.sm,
   },
   headerIconBtn: {
@@ -134,7 +151,7 @@ const styles = StyleSheet.create({
   titleText: {
     fontSize: FontSize.xl,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   loadingWrap: {
     flex: 1,
@@ -148,7 +165,7 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 64,
     height: 64,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -271,8 +288,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
     padding: Spacing.lg,
     paddingBottom: 40,
     maxHeight: '88%',
@@ -347,6 +364,24 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   submitText: { color: '#fff', fontSize: FontSize.base, fontWeight: '700' },
+  versionSegment: {
+    flexDirection: 'row',
+    borderRadius: Radius.md,
+    padding: 4,
+  },
+  versionSegmentButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: Radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingTop: Spacing.md,
+  },
   subjectOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -369,16 +404,27 @@ const styles = StyleSheet.create({
 export default function DocumentDetailsPage() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const C = useColors()
+  const { state } = useAuth()
+  const currentUser = state.status === 'authenticated' ? state.user : null
   const [doc, setDoc] = useState<DocumentItem | null>(null)
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
   const [showSubjectPicker, setShowSubjectPicker] = useState(false)
+  const [showShare, setShowShare] = useState(false)
+  const [showSharedSubject, setShowSharedSubject] = useState(false)
+  const [showVersion, setShowVersion] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [starring, setStarring] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [editVisibility, setEditVisibility] = useState<DocumentVisibility>('PRIVATE')
   const [editSubject, setEditSubject] = useState<SubjectItem | null>(null)
+  const [versionFile, setVersionFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null)
+  const [versionMode, setVersionMode] = useState<'OVERRIDE' | 'APPEND'>('OVERRIDE')
+  const [versionReason, setVersionReason] = useState('')
+  const [makeVersionActive, setMakeVersionActive] = useState(true)
+  const [uploadingVersion, setUploadingVersion] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -418,6 +464,14 @@ export default function DocumentDetailsPage() {
   const label = fileTypeLabel(doc.fileType)
   const isPublic = doc.visibility === 'PUBLIC'
   const contentLength = doc.extractedText?.length || 0
+  const accessRole =
+    doc.accessRole ||
+    (currentUser && (doc.ownerId === currentUser.id || currentUser.role === 'admin')
+      ? 'OWNER'
+      : 'VIEWER')
+  const canEdit = accessRole === 'OWNER' || accessRole === 'EDITOR'
+  const canManage = accessRole === 'OWNER'
+  const canClassifyShared = Boolean(doc.isShared && accessRole !== 'OWNER')
 
   const subjectName = getSubjectName(doc.subject)
 
@@ -455,8 +509,12 @@ export default function DocumentDetailsPage() {
       const updated = await updateDocument(id, {
         title: editTitle.trim(),
         description: editDesc.trim() || undefined,
-        subjectId: editSubject ? getSafeId(editSubject) : undefined,
-        visibility: editVisibility,
+        ...(canManage
+          ? {
+              subjectId: editSubject ? getSafeId(editSubject) : undefined,
+              visibility: editVisibility,
+            }
+          : {}),
       })
       setDoc(updated)
       setShowEdit(false)
@@ -469,14 +527,15 @@ export default function DocumentDetailsPage() {
   }
 
   const confirmDelete = () => {
-    Alert.alert('Delete Document', `Delete "${doc.title}"? This cannot be undone.`, [
+    Alert.alert('Move to Trash', `Move "${doc.title}" to Trash? You can restore it within 30 days.`, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Delete',
+        text: 'Move to Trash',
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDocument(id)
+            const result = await deleteDocument(id)
+            if (result.warning) Alert.alert('Moved to Trash', result.warning)
             router.replace('/(app)/documents')
           } catch (e) {
             const msg = e instanceof Error ? e.message : 'Could not delete document.'
@@ -485,6 +544,84 @@ export default function DocumentDetailsPage() {
         },
       },
     ])
+  }
+
+  const toggleStar = async () => {
+    const nextStarred = !doc.isStarred
+    setStarring(true)
+    setDoc((current) => (current ? { ...current, isStarred: nextStarred } : current))
+    try {
+      const updated = await setDocumentStar(id, nextStarred)
+      setDoc(updated)
+    } catch (e) {
+      setDoc((current) => (current ? { ...current, isStarred: doc.isStarred } : current))
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not update star.')
+    } finally {
+      setStarring(false)
+    }
+  }
+
+  const downloadFile = async () => {
+    try {
+      const { downloadUrl } = await getDocumentDownloadUrl(id)
+      await Linking.openURL(downloadUrl)
+    } catch (error) {
+      Alert.alert(
+        'Download failed',
+        error instanceof Error ? error.message : 'Unable to download document.',
+      )
+    }
+  }
+
+  const pickVersionFile = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      copyToCacheDirectory: true,
+      type: [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain',
+        'text/markdown',
+      ],
+    })
+    if (!result.canceled && result.assets?.[0]) setVersionFile(result.assets[0])
+  }
+
+  const submitVersion = async () => {
+    if (!versionFile) {
+      Alert.alert('No file', 'Please choose a version file first.')
+      return
+    }
+    setUploadingVersion(true)
+    try {
+      await updateDocumentVersion(id, {
+        file: {
+          uri: versionFile.uri,
+          name: versionFile.name,
+          type: versionFile.mimeType || 'application/octet-stream',
+          size: versionFile.size,
+        },
+        makeActive: versionMode === 'OVERRIDE' ? true : makeVersionActive,
+        uploadMode: versionMode,
+        uploadReason: versionReason.trim() || undefined,
+      })
+      const [updatedDocument, versions] = await Promise.all([
+        getDocument(id),
+        getDocumentVersions(id),
+      ])
+      setDoc({ ...updatedDocument, totalVersions: versions.length })
+      setVersionFile(null)
+      setVersionReason('')
+      setShowVersion(false)
+    } catch (error) {
+      Alert.alert(
+        'Version upload failed',
+        error instanceof Error ? error.message : 'Unable to upload version.',
+      )
+    } finally {
+      setUploadingVersion(false)
+    }
   }
 
   return (
@@ -503,18 +640,62 @@ export default function DocumentDetailsPage() {
             </View>
             <View style={styles.headerActions}>
               <Pressable
+                accessibilityLabel={doc.isStarred ? 'Unstar document' : 'Star document'}
+                disabled={starring}
+                style={[styles.headerIconBtn, { backgroundColor: C.cardElevated, borderColor: C.cardBorder }]}
+                onPress={toggleStar}
+              >
+                <Star
+                  size={17}
+                  color={doc.isStarred ? '#F59E0B' : C.muted}
+                  fill={doc.isStarred ? '#F59E0B' : 'transparent'}
+                />
+              </Pressable>
+              {canManage ? (
+              <Pressable
+                accessibilityLabel="Share document"
+                style={[styles.headerIconBtn, { backgroundColor: C.primaryDim, borderColor: C.primary }]}
+                onPress={() => setShowShare(true)}
+              >
+                <Share2 size={17} color={C.primary} />
+              </Pressable>
+              ) : null}
+              {canClassifyShared ? (
+              <Pressable
+                accessibilityLabel="Assign shared document subject"
+                style={[styles.headerIconBtn, { backgroundColor: C.primaryDim, borderColor: C.primary }]}
+                onPress={() => setShowSharedSubject(true)}
+              >
+                <BookOpen size={17} color={C.primary} />
+              </Pressable>
+              ) : null}
+              {canEdit ? (
+              <Pressable
+                accessibilityLabel="Upload document version"
+                style={[styles.headerIconBtn, { backgroundColor: C.primaryDim, borderColor: C.primary }]}
+                onPress={() => setShowVersion(true)}
+              >
+                <UploadCloud size={17} color={C.primary} />
+              </Pressable>
+              ) : null}
+              {canEdit ? (
+              <Pressable
+                accessibilityLabel="Edit document"
                 style={[styles.headerIconBtn, { backgroundColor: C.primaryDim, borderColor: C.primary }]}
                 onPress={openEdit}
               >
                 <Edit2 size={17} color={C.primary} />
               </Pressable>
+              ) : null}
+              {canManage ? (
               <Pressable
+                accessibilityLabel="Delete document"
                 style={[styles.headerIconBtn, { backgroundColor: C.errorDim, borderColor: C.error }]}
                 onPress={confirmDelete}
               >
                 <Trash2 size={17} color={C.error} />
               </Pressable>
-              <ThemeToggle size={38} />
+              ) : null}
             </View>
           </View>
 
@@ -704,10 +885,10 @@ export default function DocumentDetailsPage() {
             {!!doc.fileUrl && (
               <Pressable
                 style={[styles.actionBtn, { backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder }]}
-                onPress={() => Linking.openURL(doc.fileUrl)}
+                onPress={downloadFile}
               >
-                <ExternalLink size={16} color={C.text} />
-                <Text style={[styles.actionBtnText, { color: C.text }]}>Open File</Text>
+                <Download size={16} color={C.text} />
+                <Text style={[styles.actionBtnText, { color: C.text }]}>Download</Text>
               </Pressable>
             )}
             <Pressable
@@ -749,6 +930,8 @@ export default function DocumentDetailsPage() {
                   style={[styles.input, { backgroundColor: C.cardElevated, borderColor: C.cardBorder, color: C.text }]}
                 />
 
+                {canManage ? (
+                <>
                 <Text style={[styles.label, { color: C.textSecondary }]}>Subject</Text>
                 <Pressable
                   onPress={() => setShowSubjectPicker(true)}
@@ -779,6 +962,8 @@ export default function DocumentDetailsPage() {
                   )}
                   <ChevronDown size={18} color={C.muted} />
                 </Pressable>
+                </>
+                ) : null}
 
                 <Text style={[styles.label, { color: C.textSecondary }]}>Description</Text>
                 <TextInput
@@ -806,6 +991,92 @@ export default function DocumentDetailsPage() {
                   <Text style={styles.submitText}>{savingEdit ? 'Saving...' : 'Save changes'}</Text>
                 </Pressable>
               </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        <Modal
+          visible={showVersion}
+          transparent
+          animationType="slide"
+          onRequestClose={() => !uploadingVersion && setShowVersion(false)}
+        >
+          <Pressable style={styles.overlay} onPress={() => !uploadingVersion && setShowVersion(false)}>
+            <Pressable style={[styles.sheet, { backgroundColor: C.card }]} onPress={() => {}}>
+              <View style={[styles.sheetHandle, { backgroundColor: C.cardBorder }]} />
+              <View style={styles.sheetHeader}>
+                <Text selectable style={[styles.sheetTitle, { color: C.text }]}>Upload New Version</Text>
+                <Pressable disabled={uploadingVersion} hitSlop={8} onPress={() => setShowVersion(false)}>
+                  <X size={20} color={C.muted} />
+                </Pressable>
+              </View>
+
+              <Text style={[styles.label, { color: C.textSecondary }]}>Document file</Text>
+              <Pressable
+                disabled={uploadingVersion}
+                onPress={pickVersionFile}
+                style={[styles.pickerTrigger, { backgroundColor: C.cardElevated, borderColor: versionFile ? C.primary : C.cardBorder }]}
+              >
+                <UploadCloud size={17} color={versionFile ? C.primary : C.muted} />
+                <Text numberOfLines={1} style={[styles.pickerPlaceholder, { color: versionFile ? C.primary : C.muted, flex: 1 }]}>
+                  {versionFile?.name || 'Choose PDF, DOCX, PPTX, XLSX, TXT, or MD'}
+                </Text>
+              </Pressable>
+
+              <Text style={[styles.label, { color: C.textSecondary }]}>Upload mode</Text>
+              <View style={[styles.versionSegment, { backgroundColor: C.cardElevated }]}>
+                {(['OVERRIDE', 'APPEND'] as const).map((mode) => {
+                  const active = versionMode === mode
+                  return (
+                    <Pressable
+                      key={mode}
+                      onPress={() => {
+                        setVersionMode(mode)
+                        if (mode === 'OVERRIDE') setMakeVersionActive(true)
+                      }}
+                      style={[styles.versionSegmentButton, active && { backgroundColor: C.primary }]}
+                    >
+                      <Text style={{ color: active ? '#fff' : C.muted, fontSize: FontSize.xs, fontWeight: '700' }}>
+                        {mode === 'OVERRIDE' ? 'Replace active' : 'Append content'}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+
+              <Text style={[styles.label, { color: C.textSecondary }]}>Change note</Text>
+              <TextInput
+                editable={!uploadingVersion}
+                maxLength={500}
+                multiline
+                onChangeText={setVersionReason}
+                placeholder="What changed in this version?"
+                placeholderTextColor={C.muted}
+                style={[styles.input, styles.inputArea, { backgroundColor: C.cardElevated, borderColor: C.cardBorder, color: C.text }]}
+                value={versionReason}
+              />
+
+              <View style={styles.switchRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.metaLabel, { color: C.text }]}>Make active version</Text>
+                  <Text style={[styles.pickerCode, { color: C.muted }]}>Override uploads are always active.</Text>
+                </View>
+                <Switch
+                  disabled={uploadingVersion || versionMode === 'OVERRIDE'}
+                  onValueChange={setMakeVersionActive}
+                  trackColor={{ false: C.cardBorder, true: C.primary }}
+                  value={versionMode === 'OVERRIDE' ? true : makeVersionActive}
+                />
+              </View>
+
+              <Pressable
+                disabled={!versionFile || uploadingVersion}
+                onPress={submitVersion}
+                style={[styles.submitBtn, { backgroundColor: C.primary }, (!versionFile || uploadingVersion) && { opacity: 0.5 }]}
+              >
+                {uploadingVersion ? <ActivityIndicator color="#fff" /> : <UploadCloud size={16} color="#fff" />}
+                <Text style={styles.submitText}>{uploadingVersion ? 'Uploading...' : 'Upload version'}</Text>
+              </Pressable>
             </Pressable>
           </Pressable>
         </Modal>
@@ -878,6 +1149,18 @@ export default function DocumentDetailsPage() {
             </Pressable>
           </Pressable>
         </Modal>
+        <DocumentShareSheet
+          document={doc}
+          onClose={() => setShowShare(false)}
+          visible={showShare}
+        />
+        <SharedDocumentSubjectSheet
+          document={doc}
+          subjects={subjects}
+          onClose={() => setShowSharedSubject(false)}
+          onUpdated={setDoc}
+          visible={showSharedSubject}
+        />
       </SafeAreaView>
   )
 }

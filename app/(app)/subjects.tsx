@@ -13,8 +13,8 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { BookOpen, Edit2, Plus, Trash2, X, FolderOpen } from 'lucide-react-native'
+import { router, useLocalSearchParams } from 'expo-router'
 import Card from '../../components/ui/Card'
-import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
 import {
@@ -28,9 +28,9 @@ import type { SubjectItem } from '../../types/subject'
 type FormState = {
   name: string
   code: string
+  semester: string
   description: string
   color: string
-  semester: string
 }
 
 const COLOR_OPTIONS = [
@@ -47,9 +47,9 @@ const COLOR_OPTIONS = [
 const EMPTY_FORM: FormState = {
   name: '',
   code: '',
+  semester: '',
   description: '',
   color: COLOR_OPTIONS[0],
-  semester: '',
 }
 
 // Hàm helper giúp lấy ID an toàn, tương thích với cả Mongoose (_id) và các DB khác (id)
@@ -61,6 +61,8 @@ const getSafeId = (item: any): string => {
 
 export default function SubjectsPage() {
   const C = useColors()
+  const { create } = useLocalSearchParams<{ create?: string }>()
+  const openedFromHub = create === '1'
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -86,20 +88,24 @@ export default function SubjectsPage() {
     load()
   }, [load])
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setShowModal(true)
-  }
+  }, [])
+
+  useEffect(() => {
+    if (openedFromHub) openCreate()
+  }, [openedFromHub, openCreate])
 
   const openEdit = (s: SubjectItem) => {
     setEditingId(getSafeId(s))
     setForm({
       name: s.name,
       code: s.code ?? '',
+      semester: s.semester ?? '',
       description: s.description ?? '',
       color: s.color ?? COLOR_OPTIONS[0],
-      semester: s.semester ?? '',
     })
     setShowModal(true)
   }
@@ -109,6 +115,7 @@ export default function SubjectsPage() {
     setShowModal(false)
     setEditingId(null)
     setForm(EMPTY_FORM)
+    if (openedFromHub) router.replace('/(app)/documents')
   }
 
   const handleSave = async () => {
@@ -122,9 +129,9 @@ export default function SubjectsPage() {
       const payload = {
         name,
         code: form.code.trim() || undefined,
+        semester: form.semester.trim() || undefined,
         description: form.description.trim() || undefined,
         color: form.color,
-        semester: form.semester.trim() || undefined,
       }
       if (editingId) {
         const updated = await updateSubject(editingId, payload)
@@ -136,6 +143,7 @@ export default function SubjectsPage() {
       setShowModal(false)
       setEditingId(null)
       setForm(EMPTY_FORM)
+      if (openedFromHub) router.replace('/(app)/documents')
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Could not save subject.'
       Alert.alert('Error', msg)
@@ -185,7 +193,6 @@ export default function SubjectsPage() {
               </View>
             </View>
             <View style={styles.headerActions}>
-              <ThemeToggle />
               <Pressable
                 onPress={openCreate}
                 style={({ pressed }) => [
@@ -244,6 +251,7 @@ export default function SubjectsPage() {
                   <SubjectRow
                     key={safeKey}
                     item={item}
+                    onOpen={(subject) => router.push(`/(app)/subject/${getSafeId(subject)}` as any)}
                     onEdit={openEdit}
                     onDelete={handleDelete}
                   />
@@ -397,19 +405,22 @@ function SubjectRow({
   item,
   onEdit,
   onDelete,
+  onOpen,
 }: {
   item: SubjectItem
   onEdit: (s: SubjectItem) => void
   onDelete: (s: SubjectItem) => void
+  onOpen: (s: SubjectItem) => void
 }) {
   const C = useColors()
+  const canManage = item.currentUserRole === 'OWNER' || item.currentUserRole === 'ADMIN'
   return (
     <Card>
       <View style={styles.row}>
         <View
           style={[styles.colorChip, { backgroundColor: item.color ?? C.primary }]}
         />
-        <View style={styles.rowInfo}>
+        <Pressable style={styles.rowInfo} onPress={() => onOpen(item)}>
           <Text style={[styles.rowName, { color: C.text }]} numberOfLines={1}>
             {item.name}
           </Text>
@@ -427,8 +438,15 @@ function SubjectRow({
               {item.description}
             </Text>
           ) : null}
-        </View>
-        <View style={styles.rowActions}>
+          <View style={styles.workspaceMeta}>
+            <Text style={[styles.roleBadge, { backgroundColor: C.primaryDim, color: C.primary }]}>{item.currentUserRole || 'NO ACCESS'}</Text>
+            <Text style={[styles.countMeta, { color: C.textSecondary }]}>{item.documentCount ?? 0} docs</Text>
+            <Text style={[styles.countMeta, { color: C.textSecondary }]}>{item.memberCount ?? 0} members</Text>
+            <Text style={[styles.countMeta, { color: C.textSecondary }]}>{item.teamCount ?? 0} teams</Text>
+          </View>
+          {item.updatedAt ? <Text style={[styles.updatedMeta, { color: C.muted }]}>Updated {new Date(item.updatedAt).toLocaleDateString()}</Text> : null}
+        </Pressable>
+        {canManage ? <View style={styles.rowActions}>
           <Pressable
             onPress={() => onEdit(item)}
             hitSlop={8}
@@ -443,7 +461,7 @@ function SubjectRow({
           >
             <Trash2 size={16} color={C.error} />
           </Pressable>
-        </View>
+        </View> : null}
       </View>
     </Card>
   )
@@ -470,7 +488,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FontSize.xl,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   subtitle: { fontSize: FontSize.xs, fontWeight: '500', marginTop: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
@@ -493,7 +511,7 @@ const styles = StyleSheet.create({
   emptyIcon: {
     width: 72,
     height: 72,
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -507,6 +525,10 @@ const styles = StyleSheet.create({
   rowCode: { fontSize: FontSize.xs, fontWeight: '600', marginTop: 2 },
   rowSemester: { fontSize: FontSize.xs, fontWeight: '500', marginTop: 2 },
   rowDesc: { fontSize: FontSize.xs, marginTop: 4 },
+  workspaceMeta: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: Spacing.sm },
+  roleBadge: { borderRadius: Radius.full, fontSize: FontSize.xs, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4 },
+  countMeta: { fontSize: FontSize.xs, fontWeight: '600' },
+  updatedMeta: { fontSize: FontSize.xs, marginTop: 6 },
   rowActions: { flexDirection: 'row', gap: 4 },
   iconBtn: { padding: 8, borderRadius: Radius.sm },
   pressed: { opacity: 0.6 },

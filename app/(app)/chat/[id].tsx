@@ -14,12 +14,13 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
-import { ArrowLeft, BookOpen, ChevronDown, ChevronRight, FileText, Paperclip, Send, Sparkles, X } from 'lucide-react-native'
+import { ArrowLeft, BookOpen, BrainCircuit, ChevronDown, ChevronRight, FileText, Paperclip, Send, Sparkles, X } from 'lucide-react-native'
 import { FontSize, Spacing, Radius } from '../../../constants/colors'
 import { useColors } from '../../../contexts/ThemeContext'
 import { listDocuments } from '../../../services/documentApi'
 import { askQuestion, getChatHistory } from '../../../services/chatApi'
 import type { DocumentItem } from '../../../types/document'
+import { getAccessibleSubject, normalizeAccessibleDocuments } from '../../../utils/accessibleDocuments'
 import { type Message, getSemesterLabel, getSubjectName, groupDocsBySemester } from '../../../utils/chatHelpers'
 
 const initialMessages: Message[] = [
@@ -52,7 +53,7 @@ export default function ChatConversationPage() {
     setDocsLoading(true)
     try {
       const result = await listDocuments()
-      const list = Array.isArray(result) ? result : []
+      const list = normalizeAccessibleDocuments(result)
       setDocs(list)
       // Auto-expand the first semester group so docs are visible immediately
       if (list.length > 0) {
@@ -115,7 +116,7 @@ export default function ChatConversationPage() {
       const result = await askQuestion({
         question: text,
         documentId: pinnedDoc?.id,
-        subject: getSubjectName(pinnedDoc?.subject, ''),
+        subject: pinnedDoc ? getSubjectName(getAccessibleSubject(pinnedDoc), '') : '',
       })
       setPinnedDoc(null)
       const aiMsg: Message = {
@@ -511,7 +512,9 @@ export default function ChatConversationPage() {
                 {isNewChat ? 'New Chat' : 'AI Assistant'}
               </Text>
             </View>
-            <View style={{ width: 36 }} />
+            <Pressable onPress={() => router.push({ pathname: '/(app)/chat/artifacts', params: { threadId: id, documentId: pinnedDoc?.id || '' } } as any)} style={styles.backBtn} accessibilityLabel="Open chat artifacts">
+              <BrainCircuit size={20} color={C.primary} />
+            </Pressable>
           </View>
 
           {/* Messages */}
@@ -659,7 +662,7 @@ export default function ChatConversationPage() {
                                   {doc.title}
                                 </Text>
                                 <Text style={styles.docRowMeta} numberOfLines={1}>
-                                  {doc.fileName}
+                                  {doc.isShared ? `${doc.accessRole === 'EDITOR' ? 'Editor' : 'Viewer'} · ` : 'Owner · '}{doc.fileName}
                                 </Text>
                               </View>
                               {pinnedDoc?.id === doc.id && (
