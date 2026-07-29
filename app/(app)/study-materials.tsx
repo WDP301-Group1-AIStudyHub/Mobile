@@ -11,7 +11,7 @@ import {
   RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import {
   Brain,
   Trash2,
@@ -80,9 +80,11 @@ export default function StudyMaterialsPage() {
     }
   }, [])
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  useFocusEffect(
+    useCallback(() => {
+      loadData()
+    }, [loadData]),
+  )
 
   // Polling to update progress of generating items
   useEffect(() => {
@@ -392,7 +394,7 @@ export default function StudyMaterialsPage() {
                           </Pressable>
                           {subjects.map((sub) => (
                             <Pressable
-                              key={sub.id}
+                              key={sub.id || sub._id || sub.name}
                               style={[styles.pickerItem, { borderBottomColor: C.cardBorder }]}
                               onPress={() => {
                                 setSelectedSubjectId(sub.id)
