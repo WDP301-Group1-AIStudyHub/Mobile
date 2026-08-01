@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View, Pressable, RefreshControl } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import {
   Archive,
   Bell,
@@ -99,15 +99,16 @@ export default function DashboardPage() {
     }
   }, [])
 
-  useEffect(() => {
-    load()
-  }, [load])
-
   const { storage, refresh: refreshStorageUsage } = useStorage()
 
-  useEffect(() => {
-    refreshStorageUsage()
-  }, [refreshStorageUsage])
+  // Refreshing on focus rather than on mount means returning from the storage
+  // screen after a purchase shows the new quota straight away.
+  useFocusEffect(
+    useCallback(() => {
+      load()
+      refreshStorageUsage()
+    }, [load, refreshStorageUsage]),
+  )
 
   const recentDocs = useMemo(
     () => [...docs].sort((a, b) => +new Date(b.updatedAt || 0) - +new Date(a.updatedAt || 0)).slice(0, 4),

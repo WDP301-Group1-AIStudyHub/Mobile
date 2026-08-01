@@ -138,7 +138,8 @@ export default function DocumentsPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
 
-   const load = useCallback(async () => {
+  const load = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true)
     try {
       const loadDocumentsForView = async () => {
         if (libraryView === 'shared') return listSharedWithMe()
@@ -413,7 +414,7 @@ export default function DocumentsPage() {
         .split(',')
         .map((t) => t.trim())
         .filter(Boolean)
-      await uploadDocument({
+      const newDoc = await uploadDocument({
         file: {
           uri: pickedFile.uri,
           name: pickedFile.name,
@@ -430,8 +431,14 @@ export default function DocumentsPage() {
         onProgress: (p) => setUploadProgress(p),
       })
       setShowUpload(false)
+      // Move the bar immediately; the server number arrives with the sync below.
       applyUploadedBytes(pickedFile.size ?? 0)
-      load()
+      // Optimistic update: prepend ngay vào list, không chờ server
+      if (libraryView === 'mine') {
+        setDocs((prev) => [newDoc, ...prev.filter((d) => getSafeId(d) !== getSafeId(newDoc))])
+      }
+      // Sync lại từ server sau 2s (đủ thời gian backend xử lý)
+      setTimeout(() => load(true), 2000)
     } catch (e) {
       const info = getApiErrorDetails(e)
 
@@ -449,6 +456,7 @@ export default function DocumentsPage() {
       setUploading(false)
     }
   }
+
 
   const toggleVisibility = async (doc: DocumentItem) => {
     const next: DocumentVisibility =
@@ -634,6 +642,8 @@ export default function DocumentsPage() {
                     setSubjectFilter('ALL')
                     setFileTypeFilter('ALL')
                     setSelectedIds([])
+                    setDocs([])          // clear data cũ ngay lập tức
+                    setLoading(true)     // bật spinner ngay
                     setLibraryView(value)
                   }}
                   style={[styles.libraryTab, active && { backgroundColor: C.primary }]}
@@ -774,7 +784,7 @@ export default function DocumentsPage() {
                 refreshing={refreshing}
                 onRefresh={() => {
                   setRefreshing(true)
-                  load()
+                  load(true)
                 }}
                 tintColor={C.primary}
                 colors={[C.primary]}

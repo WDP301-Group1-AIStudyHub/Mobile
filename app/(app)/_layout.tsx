@@ -154,7 +154,7 @@ export default function AppLayout() {
       <Tabs.Screen name="evaluation" options={{ href: null }} />
       <Tabs.Screen name="storage" options={{ href: null }} />
       <Tabs.Screen name="subject/[id]" options={{ href: null }} />
-      <Tabs.Screen name="chat/artifacts" options={{ href: null }} />
+      {/* chat/[id] and chat/artifacts are intentionally NOT registered here — they are owned by chat/_layout.tsx Stack */}
       <Tabs.Screen
         name="profile"
         options={{
@@ -175,10 +175,6 @@ export default function AppLayout() {
       />
       <Tabs.Screen
         name="document/[id]"
-        options={{ href: null }}
-      />
-      <Tabs.Screen
-        name="chat/[id]"
         options={{ href: null }}
       />
       <Tabs.Screen
