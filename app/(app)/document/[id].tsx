@@ -41,7 +41,9 @@ import {
   Share2,
   Star,
   UploadCloud,
+  Sparkles,
 } from 'lucide-react-native'
+import { askQuestion } from '../../../services/chatApi'
 import Card from '../../../components/ui/Card'
 import { FontSize, Spacing, Radius } from '../../../constants/colors'
 import { useColors } from '../../../contexts/ThemeContext'
@@ -268,6 +270,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.sm,
   },
+  actionStack: {
+    gap: Spacing.sm,
+  },
   actionBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -275,6 +280,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 14,
+    borderRadius: Radius.lg,
+  },
+  actionBtnFull: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 15,
     borderRadius: Radius.lg,
   },
   actionBtnText: {
@@ -425,6 +438,8 @@ export default function DocumentDetailsPage() {
   const [versionReason, setVersionReason] = useState('')
   const [makeVersionActive, setMakeVersionActive] = useState(true)
   const [uploadingVersion, setUploadingVersion] = useState(false)
+  const [summary, setSummary] = useState<string | null>(null)
+  const [generatingSummary, setGeneratingSummary] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -570,6 +585,24 @@ export default function DocumentDetailsPage() {
         'Download failed',
         error instanceof Error ? error.message : 'Unable to download document.',
       )
+    }
+  }
+
+  const handleSummarize = async () => {
+    if (!doc) return
+    setGeneratingSummary(true)
+    try {
+      const result = await askQuestion({
+        question: 'What is this document about? Please provide a comprehensive summary of the main topics and key points.',
+        documentId: doc.id,
+        scope: 'single_document',
+        mode: 'basic',
+      })
+      setSummary(result.answer)
+    } catch (e: any) {
+      Alert.alert('Summary Failed', e.message || 'Could not generate summary.')
+    } finally {
+      setGeneratingSummary(false)
     }
   }
 
@@ -765,13 +798,6 @@ export default function DocumentDetailsPage() {
                 </Text>
               </View>
 
-              <View style={styles.metaRow}>
-                <User size={16} color={C.muted} />
-                <Text style={[styles.metaLabel, { color: C.muted }]}>Author</Text>
-                <Text style={[styles.metaValue, { color: C.text, textAlign: 'right' }]}>
-                  {uploaderName}
-                </Text>
-              </View>
 
               <View style={styles.metaRow}>
                 <Info size={16} color={C.muted} />
@@ -880,25 +906,69 @@ export default function DocumentDetailsPage() {
             </View>
           </Card>
 
-          {/* Action Button */}
-          <View style={styles.actionRow}>
+          {/* Action Buttons – 2-row layout to avoid text truncation */}
+          <View style={styles.actionStack}>
             {!!doc.fileUrl && (
               <Pressable
-                style={[styles.actionBtn, { backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder }]}
-                onPress={downloadFile}
+                style={[styles.actionBtnFull, { backgroundColor: C.primary }]}
+                onPress={() =>
+                  router.push(`/(app)/document/viewer/${id}` as any)
+                }
               >
-                <Download size={16} color={C.text} />
-                <Text style={[styles.actionBtnText, { color: C.text }]}>Download</Text>
+                <BookOpen size={16} color="#fff" />
+                <Text style={styles.actionBtnText}>Read Document</Text>
               </Pressable>
             )}
+            
             <Pressable
-              style={[styles.actionBtn, { backgroundColor: C.primary }]}
-              onPress={() => router.push('/(app)/chat')}
+              style={[styles.actionBtnFull, { backgroundColor: C.primaryDim, borderWidth: 1, borderColor: C.primary }]}
+              onPress={handleSummarize}
+              disabled={generatingSummary}
             >
-              <MessageCircle size={16} color="#fff" />
-              <Text style={styles.actionBtnText}>Chat with Document</Text>
+              {generatingSummary ? (
+                <ActivityIndicator size="small" color={C.primary} />
+              ) : (
+                <Sparkles size={16} color={C.primary} />
+              )}
+              <Text style={[styles.actionBtnText, { color: C.primary }]}>
+                {generatingSummary ? 'Summarizing...' : 'Summarize with AI'}
+              </Text>
             </Pressable>
+
+            <View style={styles.actionRow}>
+              {!!doc.fileUrl && (
+                <Pressable
+                  style={[styles.actionBtn, { backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder }]}
+                  onPress={downloadFile}
+                >
+                  <Download size={16} color={C.text} />
+                  <Text style={[styles.actionBtnText, { color: C.text }]}>Download</Text>
+                </Pressable>
+              )}
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder }]}
+                onPress={() => router.push(`/(app)/chat?documentId=${doc.id}` as any)}
+              >
+                <MessageCircle size={16} color={C.text} />
+                <Text style={[styles.actionBtnText, { color: C.text }]}>Chat with AI</Text>
+              </Pressable>
+            </View>
           </View>
+
+          {/* AI Summary Block */}
+          {(summary || generatingSummary) && (
+            <Card style={{ marginTop: Spacing.sm, padding: Spacing.md, gap: Spacing.sm, borderColor: C.primary, borderWidth: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+                <Sparkles size={18} color={C.primary} />
+                <Text style={{ fontSize: FontSize.base, fontWeight: '700', color: C.text }}>AI Summary</Text>
+              </View>
+              {generatingSummary ? (
+                <Text style={{ color: C.muted, fontSize: FontSize.sm }}>Analyzing document content and generating summary...</Text>
+              ) : (
+                <Text style={{ color: C.text, fontSize: FontSize.sm, lineHeight: 22 }}>{summary}</Text>
+              )}
+            </Card>
+          )}
         </ScrollView>
 
         <Modal
