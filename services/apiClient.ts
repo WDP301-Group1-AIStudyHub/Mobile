@@ -6,6 +6,8 @@ export interface ApiErrorDetails {
   status?: number
   code?: string
   message: string
+  /** Structured payload accompanying the code, e.g. quota numbers. */
+  details?: Record<string, unknown>
 }
 
 export function getApiErrorDetails(error: unknown): ApiErrorDetails {
@@ -14,7 +16,12 @@ export function getApiErrorDetails(error: unknown): ApiErrorDetails {
   }
 
   const payload = error.response?.data as
-    | { message?: string; error?: string; code?: string }
+    | {
+        message?: string
+        error?: string
+        code?: string
+        details?: Record<string, unknown>
+      }
     | undefined
   const message =
     payload?.message ||
@@ -23,7 +30,12 @@ export function getApiErrorDetails(error: unknown): ApiErrorDetails {
       ? 'The server took too long to respond. Please try again.'
       : error.message || 'Unable to reach the server.')
 
-  return { status: error.response?.status, code: payload?.code, message }
+  return {
+    status: error.response?.status,
+    code: payload?.code,
+    message,
+    details: payload?.details,
+  }
 }
 
 const configuredApiBaseUrl =

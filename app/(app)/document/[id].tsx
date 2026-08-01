@@ -60,6 +60,13 @@ import type { SubjectItem } from '../../../types/subject'
 import DocumentShareSheet from '../../../components/documents/document-share-sheet'
 import SharedDocumentSubjectSheet from '../../../components/documents/shared-document-subject-sheet'
 import { useAuth } from '../../../hooks/useAuth'
+import { buildQuotaErrorMessage, formatBytes } from '../../../utils/formatBytes'
+import { getApiErrorDetails } from '../../../services/apiClient'
+import { hasCapacityFor, refreshStorage } from '../../../hooks/useStorage'
+import type { StorageQuotaDetails } from '../../../types/storage'
+
+/** Matches the multer limit in the backend and Cloudinary's raw-file cap. */
+const MAX_FILE_SIZE = 10 * 1024 * 1024
 
 const getSafeId = (item: unknown): string => {
   if (!item || typeof item !== 'object') return ''
@@ -75,12 +82,6 @@ function getSubjectName(subject: unknown, fallback = 'Uncategorized'): string {
     if (typeof name === 'string' && name.length > 0) return name
   }
   return fallback
-}
-
-function formatBytes(bytes: number): string {
-  if (!bytes || bytes < 1024) return `${bytes || 0} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function fileTypeColorFn(type: string | undefined, C: ReturnType<typeof useColors>): string {
@@ -585,7 +586,30 @@ export default function DocumentDetailsPage() {
         'text/markdown',
       ],
     })
-    if (!result.canceled && result.assets?.[0]) setVersionFile(result.assets[0])
+    if (result.canceled || !result.assets?.[0]) return
+
+    const file = result.assets[0]
+
+    if ((file.size ?? 0) > MAX_FILE_SIZE) {
+      Alert.alert('File too large', 'Each file must be 10 MB or smaller.')
+      return
+    }
+
+    // The server charges the DOCUMENT OWNER. This client only knows its own
+    // quota, so for a shared editor the two differ and a pre-check here would
+    // wrongly block them. Owners get the check; everyone else relies on the 413.
+    if (accessRole === 'OWNER') {
+      const capacity = hasCapacityFor(file.size ?? 0)
+      if (capacity.known && !capacity.ok) {
+        Alert.alert(
+          'Not enough storage',
+          `Needs ${formatBytes(file.size ?? 0)} but only ${formatBytes(capacity.available)} is free.`,
+        )
+        return
+      }
+    }
+
+    setVersionFile(file)
   }
 
   const submitVersion = async () => {
@@ -614,11 +638,19 @@ export default function DocumentDetailsPage() {
       setVersionFile(null)
       setVersionReason('')
       setShowVersion(false)
+      void refreshStorage()
     } catch (error) {
-      Alert.alert(
-        'Version upload failed',
-        error instanceof Error ? error.message : 'Unable to upload version.',
-      )
+      const info = getApiErrorDetails(error)
+
+      if (info.code === 'STORAGE_QUOTA_EXCEEDED') {
+        void refreshStorage()
+        Alert.alert(
+          'Not enough storage',
+          buildQuotaErrorMessage(info.details as unknown as StorageQuotaDetails),
+        )
+      } else {
+        Alert.alert('Version upload failed', info.message)
+      }
     } finally {
       setUploadingVersion(false)
     }

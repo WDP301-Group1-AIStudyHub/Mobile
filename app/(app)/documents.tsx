@@ -66,6 +66,13 @@ import type {
 import type { SubjectItem } from '../../types/subject'
 import DocumentShareSheet from '../../components/documents/document-share-sheet'
 import SharedDocumentSubjectSheet from '../../components/documents/shared-document-subject-sheet'
+import { buildQuotaErrorMessage, formatBytes } from '../../utils/formatBytes'
+import { getApiErrorDetails } from '../../services/apiClient'
+import { applyUploadedBytes, hasCapacityFor, refreshStorage } from '../../hooks/useStorage'
+import type { StorageQuotaDetails } from '../../types/storage'
+
+/** Matches the multer limit in the backend and Cloudinary's raw-file cap. */
+const MAX_FILE_SIZE = 10 * 1024 * 1024
 
 type LibraryView = 'mine' | 'shared' | 'starred' | 'trash'
 type DocumentSort = 'UPDATED_DESC' | 'NAME_ASC' | 'SIZE_DESC'
@@ -87,13 +94,6 @@ function getSubjectName(subject: unknown, fallback = 'Uncategorized'): string {
     if (typeof n === 'string' && n.length > 0) return n
   }
   return fallback
-}
-
-function formatBytes(bytes: number): string {
-  if (!bytes) return '0 B'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function fileTypeColor(type: string | undefined, C: ReturnType<typeof useColors>): string {
@@ -138,7 +138,7 @@ export default function DocumentsPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
 
-  const load = useCallback(async () => {
+   const load = useCallback(async () => {
     try {
       const loadDocumentsForView = async () => {
         if (libraryView === 'shared') return listSharedWithMe()
@@ -370,6 +370,23 @@ export default function DocumentsPage() {
       })
       if (res.canceled || !res.assets?.length) return
       const file = res.assets[0]
+
+      // Neither limit was checked here before, so a 10 MB+ file used to travel
+      // all the way to the server just to be rejected by multer.
+      if ((file.size ?? 0) > MAX_FILE_SIZE) {
+        Alert.alert('File too large', 'Each file must be 10 MB or smaller.')
+        return
+      }
+
+      const capacity = hasCapacityFor(file.size ?? 0)
+      if (capacity.known && !capacity.ok) {
+        Alert.alert(
+          'Not enough storage',
+          `This file needs ${formatBytes(file.size ?? 0)} but only ${formatBytes(capacity.available)} is free. Delete some documents or upgrade your plan.`,
+        )
+        return
+      }
+
       setPickedFile(file)
       if (!formTitle) {
         const dot = file.name.lastIndexOf('.')
@@ -413,10 +430,21 @@ export default function DocumentsPage() {
         onProgress: (p) => setUploadProgress(p),
       })
       setShowUpload(false)
+      applyUploadedBytes(pickedFile.size ?? 0)
       load()
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Upload failed.'
-      Alert.alert('Upload failed', msg)
+      const info = getApiErrorDetails(e)
+
+      if (info.code === 'STORAGE_QUOTA_EXCEEDED') {
+        // Refresh so the bar reflects the truth that caused the rejection.
+        void refreshStorage()
+        Alert.alert(
+          'Not enough storage',
+          buildQuotaErrorMessage(info.details as unknown as StorageQuotaDetails),
+        )
+      } else {
+        Alert.alert('Upload failed', info.message)
+      }
     } finally {
       setUploading(false)
     }

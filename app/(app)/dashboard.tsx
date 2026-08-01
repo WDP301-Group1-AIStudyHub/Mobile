@@ -23,16 +23,9 @@ import { listSubjects } from '../../services/subjectApi'
 import type { DocumentItem } from '../../types/document'
 import type { SubjectItem } from '../../types/subject'
 import { getAccessibleSubject, normalizeAccessibleDocuments } from '../../utils/accessibleDocuments'
-
-const STORAGE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024 // 10 GB
-
-function formatBytes(bytes: number): string {
-  if (!bytes) return '0.00 GB'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
+import { formatBytes } from '../../utils/formatBytes'
+import StorageUsageBar from '../../components/storage/StorageUsageBar'
+import { useStorage } from '../../hooks/useStorage'
 
 function timeAgo(isoDate: string | undefined): string {
   if (!isoDate) return 'recently'
@@ -110,10 +103,11 @@ export default function DashboardPage() {
     load()
   }, [load])
 
-  const totalBytes = useMemo(
-    () => docs.reduce((sum, d) => sum + (d.fileSize || 0), 0),
-    [docs]
-  )
+  const { storage, refresh: refreshStorageUsage } = useStorage()
+
+  useEffect(() => {
+    refreshStorageUsage()
+  }, [refreshStorageUsage])
 
   const recentDocs = useMemo(
     () => [...docs].sort((a, b) => +new Date(b.updatedAt || 0) - +new Date(a.updatedAt || 0)).slice(0, 4),
@@ -132,8 +126,6 @@ export default function DashboardPage() {
       .sort((a, b) => b.count - a.count)
       .slice(0, 4)
   }, [subjects, docs])
-
-  const storagePct = Math.min(100, (totalBytes / STORAGE_LIMIT_BYTES) * 100)
 
   const stats = useMemo(
     () => [
@@ -169,10 +161,23 @@ export default function DashboardPage() {
       alignItems: 'center', justifyContent: 'center',
     },
     storageLabel: { fontSize: FontSize.xs, fontWeight: '700', color: C.muted, letterSpacing: 1.5 },
+    storagePlanRow: {
+      flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+      marginTop: Spacing.md, flexWrap: 'wrap',
+    },
+    storagePlanName: { fontSize: FontSize.lg, fontWeight: '800', color: C.text },
+    storageBadge: {
+      fontSize: FontSize.xs, fontWeight: '700', overflow: 'hidden',
+      paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.full,
+    },
     storageValue: { fontSize: FontSize.xxl, fontWeight: '800', color: C.text, letterSpacing: 0, marginTop: Spacing.sm },
+    storageValueTotal: { fontSize: FontSize.md, fontWeight: '600', color: C.muted },
     storageCaption: { fontSize: FontSize.xs, color: C.muted, marginTop: 2 },
-    storageBarTrack: { height: 4, borderRadius: 2, backgroundColor: C.cardBorder, marginTop: Spacing.md, overflow: 'hidden' },
-    storageBarFill: { height: 4, borderRadius: 2, backgroundColor: C.accentTeal, width: `${storagePct}%` },
+    storageBarWrap: { marginTop: Spacing.md },
+    storageCta: {
+      flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: Spacing.md,
+    },
+    storageCtaText: { fontSize: FontSize.xs, fontWeight: '700', color: C.primary },
     aiCard: {
       backgroundColor: C.primary, borderRadius: Radius.lg,
       padding: Spacing.lg, gap: Spacing.md,
@@ -306,7 +311,7 @@ export default function DashboardPage() {
       width: 38, height: 38, borderRadius: 11,
       backgroundColor: C.accentTealDim, alignItems: 'center', justifyContent: 'center',
     },
-  }), [C, storagePct])
+  }), [C])
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -338,22 +343,75 @@ export default function DashboardPage() {
             <Text style={styles.pageSubtitle}>Manage documents, study sets, and recent activity.</Text>
           </View>
 
-          {/* Storage card */}
-          <View style={styles.storageCard}>
+          {/* Storage plan + usage. Tapping anywhere opens the plans screen. */}
+          <Pressable
+            style={styles.storageCard}
+            onPress={() => router.push('/(app)/storage')}
+          >
             <View style={styles.storageTopRow}>
               <View style={styles.storageIconBadge}>
                 <Database size={18} color={C.accentTeal} strokeWidth={2} />
               </View>
-              <Text style={styles.storageLabel}>STORAGE</Text>
+              <Text style={styles.storageLabel}>STORAGE PLAN</Text>
             </View>
-            <Text style={styles.storageValue}>{formatBytes(totalBytes)}</Text>
-            <Text style={styles.storageCaption}>
-              {storagePct.toFixed(2)}% of 10 GB limit used
+
+            <View style={styles.storagePlanRow}>
+              <Text style={styles.storagePlanName}>
+                {storage?.package?.name ?? 'Free'}
+              </Text>
+              <Text
+                style={[
+                  styles.storageBadge,
+                  storage?.status === 'FULL' || storage?.status === 'CRITICAL'
+                    ? { backgroundColor: C.errorDim, color: C.error }
+                    : storage?.status === 'WARNING'
+                      ? { backgroundColor: C.warningDim, color: C.warning }
+                      : { backgroundColor: C.successDim, color: C.success },
+                ]}
+              >
+                {storage?.status === 'FULL'
+                  ? 'Full'
+                  : storage?.status === 'CRITICAL'
+                    ? 'Almost full'
+                    : storage?.status === 'WARNING'
+                      ? 'Filling up'
+                      : 'Active'}
+              </Text>
+            </View>
+
+            <Text style={styles.storageValue}>
+              {formatBytes(storage?.usedBytes ?? 0)}
+              <Text style={styles.storageValueTotal}>
+                {' / '}
+                {formatBytes(storage?.quotaBytes ?? 0)}
+              </Text>
             </Text>
-            <View style={styles.storageBarTrack}>
-              <View style={styles.storageBarFill} />
+            <Text style={styles.storageCaption}>
+              {storage
+                ? `${formatBytes(storage.availableBytes)} free · 10 MB max per file`
+                : 'loading storage...'}
+            </Text>
+
+            <View style={styles.storageBarWrap}>
+              <StorageUsageBar
+                quotaBytes={storage?.quotaBytes ?? 0}
+                showLabel={false}
+                status={storage?.status ?? 'OK'}
+                usedBytes={storage?.usedBytes ?? 0}
+              />
             </View>
-          </View>
+
+            <View style={styles.storageCta}>
+              <Text style={styles.storageCtaText}>
+                {storage?.status === 'FULL'
+                  ? 'Storage is full — upgrade your plan'
+                  : storage?.status === 'CRITICAL' || storage?.status === 'WARNING'
+                    ? 'Running low — compare plans'
+                    : 'Manage plan'}
+              </Text>
+              <ChevronRight size={15} color={C.primary} strokeWidth={2.2} />
+            </View>
+          </Pressable>
 
           {/* AI card */}
           <View style={styles.aiCard}>

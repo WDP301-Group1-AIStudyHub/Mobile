@@ -12,6 +12,7 @@ import { router } from 'expo-router'
 import {
   Bell,
   BookOpen,
+  HardDrive,
   ChevronRight,
   Lock,
   LogOut,
@@ -29,7 +30,7 @@ import { listDocuments } from '../../services/documentApi'
 import { listSubjects } from '../../services/subjectApi'
 import { normalizeAccessibleDocuments } from '../../utils/accessibleDocuments'
 
-type MenuKey = 'profile' | 'password' | 'notifications' | 'subjects' | 'model' | 'security' | 'settings'
+type MenuKey = 'profile' | 'password' | 'notifications' | 'subjects' | 'storage' | 'model' | 'security' | 'settings'
 
 export default function ProfilePage() {
   const { state, signOut } = useAuth()
@@ -75,6 +76,7 @@ export default function ProfilePage() {
       title: 'Preferences',
       items: [
         { icon: BookOpen, label: 'My Subjects', key: 'subjects' as MenuKey, color: C.accentTeal },
+        { icon: HardDrive, label: 'Storage plan', key: 'storage' as MenuKey, color: C.primary },
         { icon: Sparkles, label: 'AI Model', key: 'model' as MenuKey, color: C.accent },
       ],
     },
@@ -157,6 +159,10 @@ export default function ProfilePage() {
     } else if (key === 'subjects') {
       if (user?.role !== 'admin') {
         router.push('/(app)/subjects')
+      }
+    } else if (key === 'storage') {
+      if (user?.role !== 'admin') {
+        router.push('/(app)/storage')
       }
     }
   }
