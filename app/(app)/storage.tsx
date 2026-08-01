@@ -16,6 +16,7 @@ import * as Linking from 'expo-linking'
 import * as WebBrowser from 'expo-web-browser'
 import { ArrowLeft, Check, HardDrive, RefreshCw } from 'lucide-react-native'
 import Button from '../../components/ui/Button'
+import StoragePlanButton from '../../components/storage/StoragePlanButton'
 import Card from '../../components/ui/Card'
 import StorageUsageBar from '../../components/storage/StorageUsageBar'
 import { FontSize, Radius, Spacing } from '../../constants/colors'
@@ -67,6 +68,10 @@ export default function StorageScreen() {
   const [busy, setBusy] = useState(false)
   const [reconciling, setReconciling] = useState(false)
   const [target, setTarget] = useState<StoragePackage | null>(null)
+  const [activationNotice, setActivationNotice] = useState<{
+    packageName: string
+    quotaBytes: number
+  } | null>(null)
   const [transactions, setTransactions] = useState<StorageTransaction[]>([])
   const isMountedRef = useRef(true)
 
@@ -114,10 +119,10 @@ export default function StorageScreen() {
           if (isMountedRef.current) setTransactions(items)
 
           if (snapshot.transaction.status === 'COMPLETED') {
-            Alert.alert(
-              'Success',
-              `${snapshot.transaction.package.name} plan activated. New quota: ${formatBytes(snapshot.transaction.package.capacityBytes)}.`,
-            )
+            setActivationNotice({
+              packageName: snapshot.transaction.package.name,
+              quotaBytes: snapshot.transaction.package.capacityBytes,
+            })
           } else {
             Alert.alert(
               'Payment not completed',
@@ -166,6 +171,11 @@ export default function StorageScreen() {
     (pkg: StoragePackage): string | null => {
       if (pkg.id === currentPackageId) return null
 
+      const currentPackage = storage?.package
+      if (pkg.priceVnd === 0 && currentPackage && currentPackage.priceVnd > 0) {
+        return 'The Free plan cannot be selected after upgrading.'
+      }
+
       const committed = (storage?.usedBytes ?? 0) + (storage?.reservedBytes ?? 0)
       if (pkg.capacityBytes < committed) {
         return `You are using ${formatBytes(committed)}, more than this plan's ${formatBytes(pkg.capacityBytes)} capacity.`
@@ -181,7 +191,12 @@ export default function StorageScreen() {
 
     setBusy(true)
     try {
-      const order = await createPurchase(target.id)
+      // This differs between Expo Go (exp://...) and an installed build
+      // (aistudyhub://...). The backend stores this exact value and redirects
+      // back to it, allowing Android's auth-session polyfill to close the
+      // Custom Tab after VNPay completes.
+      const clientReturnUrl = Linking.createURL('storage')
+      const order = await createPurchase(target.id, clientReturnUrl)
 
       if (!order.requiresPayment) {
         setTarget(null)
@@ -189,7 +204,10 @@ export default function StorageScreen() {
         await refreshStoragePackages()
         const items = await listTransactions()
         if (isMountedRef.current) setTransactions(items)
-        Alert.alert('Success', `Switched to the ${order.package.name} plan.`)
+        setActivationNotice({
+          packageName: order.package.name,
+          quotaBytes: order.package.capacityBytes,
+        })
         return
       }
 
@@ -199,7 +217,7 @@ export default function StorageScreen() {
       // Tab when the redirect matches our scheme.
       await WebBrowser.openAuthSessionAsync(
         order.paymentUrl,
-        Linking.createURL('storage'),
+        clientReturnUrl,
       )
 
       await pollTransaction(order.orderRef)
@@ -265,7 +283,15 @@ export default function StorageScreen() {
           color: C.text,
           marginBottom: Spacing.sm,
         },
-        pkgCard: { gap: Spacing.sm },
+        // Was a <Card>; now a <Pressable>, so it carries the card surface itself.
+        pkgCard: {
+          gap: Spacing.sm,
+          backgroundColor: C.card,
+          borderRadius: Radius.lg,
+          borderWidth: 1,
+          borderColor: C.cardBorder,
+          padding: Spacing.md,
+        },
         pkgTopRow: {
           flexDirection: 'row',
           alignItems: 'center',
@@ -293,7 +319,6 @@ export default function StorageScreen() {
         pkgDesc: { fontSize: FontSize.sm, color: C.textSecondary, lineHeight: 19 },
         featureRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'flex-start' },
         featureText: { flex: 1, fontSize: FontSize.sm, color: C.textSecondary },
-        blockText: { fontSize: FontSize.xs, color: C.error, fontWeight: '600' },
         txRow: {
           flexDirection: 'row',
           justifyContent: 'space-between',
@@ -323,6 +348,63 @@ export default function StorageScreen() {
           gap: Spacing.md,
         },
         modalTitle: { fontSize: FontSize.xl, fontWeight: '700', color: C.text },
+        successOverlay: {
+          flex: 1,
+          justifyContent: 'center',
+          padding: Spacing.lg,
+          backgroundColor: C.overlayDark,
+        },
+        successCard: {
+          width: '100%',
+          maxWidth: 380,
+          alignSelf: 'center',
+          alignItems: 'center',
+          gap: Spacing.md,
+          padding: Spacing.lg,
+          borderRadius: Radius.xl,
+          borderWidth: 1,
+          borderColor: C.cardBorder,
+          backgroundColor: C.card,
+        },
+        successIcon: {
+          width: 64,
+          height: 64,
+          borderRadius: Radius.full,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: C.success,
+        },
+        successTitle: {
+          fontSize: FontSize.xl,
+          fontWeight: '800',
+          color: C.text,
+          textAlign: 'center',
+        },
+        successMessage: {
+          fontSize: FontSize.sm,
+          lineHeight: 20,
+          color: C.textSecondary,
+          textAlign: 'center',
+        },
+        successQuota: {
+          width: '100%',
+          alignItems: 'center',
+          gap: Spacing.xs,
+          padding: Spacing.md,
+          borderRadius: Radius.md,
+          backgroundColor: C.successDim,
+        },
+        successQuotaLabel: {
+          fontSize: FontSize.xs,
+          fontWeight: '700',
+          color: C.success,
+          textTransform: 'uppercase',
+        },
+        successQuotaValue: {
+          fontSize: FontSize.xxl,
+          fontWeight: '800',
+          color: C.success,
+        },
         diffRow: {
           flexDirection: 'row',
           justifyContent: 'space-between',
@@ -404,9 +486,24 @@ export default function StorageScreen() {
               packages.map((pkg) => {
                 const isCurrent = pkg.id === currentPackageId
                 const reason = blockReason(pkg)
+                const hideAction =
+                  pkg.priceVnd === 0 &&
+                  Boolean(storage?.package && storage.package.priceVnd > 0)
 
                 return (
-                  <Card key={pkg.id} style={[styles.pkgCard, { marginBottom: Spacing.md }]}>
+                  <Pressable
+                    key={pkg.id}
+                    disabled={isCurrent || Boolean(reason)}
+                    onPress={() => setTarget(pkg)}
+                    // Touch has no hover, so the equivalent affordance is a
+                    // pressed state on the whole card.
+                    style={({ pressed }) => [
+                      styles.pkgCard,
+                      { marginBottom: Spacing.md },
+                      pkg.highlight ? { borderColor: C.primary } : null,
+                      pressed ? { borderColor: C.primary, backgroundColor: C.primaryDim } : null,
+                    ]}
+                  >
                     <View style={styles.pkgTopRow}>
                       <View style={styles.pkgIcon}>
                         <HardDrive size={17} color={C.accentTeal} strokeWidth={2} />
@@ -448,16 +545,15 @@ export default function StorageScreen() {
                       </View>
                     ))}
 
-                    {reason ? <Text style={styles.blockText}>{reason}</Text> : null}
-
-                    <Button
-                      title={isCurrent ? 'Your current plan' : 'Choose this plan'}
-                      variant={pkg.highlight && !isCurrent && !reason ? 'primary' : 'outline'}
-                      disabled={isCurrent || Boolean(reason)}
-                      onPress={() => setTarget(pkg)}
-                      fullWidth
-                    />
-                  </Card>
+                    {!hideAction ? (
+                      <StoragePlanButton
+                        disabled={isCurrent || Boolean(reason)}
+                        isCurrent={isCurrent}
+                        onPress={() => setTarget(pkg)}
+                        title={isCurrent ? 'Your current plan' : 'Choose this plan'}
+                      />
+                    ) : null}
+                  </Pressable>
                 )
               })
             )}
@@ -544,6 +640,37 @@ export default function StorageScreen() {
               disabled={busy}
               onPress={() => setTarget(null)}
               fullWidth
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setActivationNotice(null)}
+        transparent
+        visible={Boolean(activationNotice)}
+      >
+        <View style={styles.successOverlay}>
+          <View style={styles.successCard}>
+            <View style={styles.successIcon}>
+              <Check color="#fff" size={32} strokeWidth={3} />
+            </View>
+            <Text style={styles.successTitle}>Plan activated</Text>
+            <Text style={styles.successMessage}>
+              Your {activationNotice?.packageName} plan is ready. Your documents
+              and study spaces remain unchanged.
+            </Text>
+            <View style={styles.successQuota}>
+              <Text style={styles.successQuotaLabel}>New storage quota</Text>
+              <Text style={styles.successQuotaValue}>
+                {formatBytes(activationNotice?.quotaBytes ?? 0)}
+              </Text>
+            </View>
+            <Button
+              fullWidth
+              onPress={() => setActivationNotice(null)}
+              title="Continue"
             />
           </View>
         </View>

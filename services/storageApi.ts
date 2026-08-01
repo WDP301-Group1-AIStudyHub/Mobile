@@ -28,10 +28,13 @@ export async function reconcileStorage(): Promise<UserStorage & { drift: number 
   return data.data
 }
 
-export async function createPurchase(packageId: string): Promise<PurchaseOrder> {
+export async function createPurchase(
+  packageId: string,
+  clientReturnUrl?: string,
+): Promise<PurchaseOrder> {
   const { data } = await apiClient.post<ApiResponse<PurchaseOrder>>(
     '/api/storage/purchases',
-    { packageId, platform: 'MOBILE' },
+    { packageId, platform: 'MOBILE', clientReturnUrl },
   )
   if (!data.data) throw new Error(data.message || 'Could not create the order')
   return data.data
