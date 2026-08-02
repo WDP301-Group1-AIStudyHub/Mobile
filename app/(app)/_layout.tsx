@@ -178,6 +178,14 @@ export default function AppLayout() {
         options={{ href: null }}
       />
       <Tabs.Screen
+        name="document/viewer/[id]"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="search"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
         name="study-material/[id]"
         options={{ href: null }}
       />

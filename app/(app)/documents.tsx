@@ -70,6 +70,7 @@ import { buildQuotaErrorMessage, formatBytes } from '../../utils/formatBytes'
 import { getApiErrorDetails } from '../../services/apiClient'
 import { applyUploadedBytes, hasCapacityFor, refreshStorage } from '../../hooks/useStorage'
 import type { StorageQuotaDetails } from '../../types/storage'
+import { matchesQuery } from '../../utils/searchUtils'
 
 /** Matches the multer limit in the backend and Cloudinary's raw-file cap. */
 const MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -175,8 +176,8 @@ export default function DocumentsPage() {
   )
 
   const filteredDocs = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    const match = (s: string) => s.toLowerCase().includes(q)
+    const q = search.trim()
+    const match = (s: string) => matchesQuery(s, q)
 
     return docs
       .filter((document) => {
@@ -617,10 +618,22 @@ export default function DocumentsPage() {
                         ? `${docs.length} starred documents`
                         : libraryView === 'trash'
                           ? `${docs.length} documents in trash`
-                      : `${subjects.length} subjects | ${docs.length} documents`}
+                          : `${subjects.length} subjects | ${docs.length} documents`}
                 </Text>
               </View>
             </View>
+            {/* Advanced Search shortcut */}
+            <Pressable
+              accessibilityLabel="Open advanced search"
+              onPress={() => router.push('/(app)/search' as any)}
+              style={[
+                styles.searchShortcutBtn,
+                { backgroundColor: C.primaryDim, borderColor: C.primary },
+              ]}
+              hitSlop={8}
+            >
+              <Search size={18} color={C.primary} />
+            </Pressable>
           </View>
 
           <View style={[styles.libraryTabs, { backgroundColor: C.cardElevated }]}>
@@ -658,42 +671,42 @@ export default function DocumentsPage() {
           </View>
 
           {libraryView === 'mine' ? (
-          <View style={styles.primaryActions}>
-            <Pressable
-              accessibilityLabel="Open subject workspaces"
-              onPress={() => router.push('/(app)/subjects')}
-              style={({ pressed }) => [
-                styles.actionButton,
-                { backgroundColor: C.cardElevated, borderColor: C.primary },
-                pressed && styles.pressed,
-              ]}
-            >
-              <FolderOpen size={17} color={C.primary} />
-              <Text
-                numberOfLines={1}
-                style={[styles.actionButtonText, { color: C.primary }]}
+            <View style={styles.primaryActions}>
+              <Pressable
+                accessibilityLabel="Open subject workspaces"
+                onPress={() => router.push('/(app)/subjects')}
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  { backgroundColor: C.cardElevated, borderColor: C.primary },
+                  pressed && styles.pressed,
+                ]}
               >
-                Workspaces
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Upload document"
-              onPress={() => openUpload()}
-              style={({ pressed }) => [
-                styles.actionButton,
-                { backgroundColor: C.primary, borderColor: C.primary },
-                pressed && styles.pressed,
-              ]}
-            >
-              <UploadCloud size={17} color="#fff" />
-              <Text
-                numberOfLines={1}
-                style={[styles.actionButtonText, { color: '#fff' }]}
+                <FolderOpen size={17} color={C.primary} />
+                <Text
+                  numberOfLines={1}
+                  style={[styles.actionButtonText, { color: C.primary }]}
+                >
+                  Workspaces
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Upload document"
+                onPress={() => openUpload()}
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  { backgroundColor: C.primary, borderColor: C.primary },
+                  pressed && styles.pressed,
+                ]}
               >
-                Upload doc
-              </Text>
-            </Pressable>
-          </View>
+                <UploadCloud size={17} color="#fff" />
+                <Text
+                  numberOfLines={1}
+                  style={[styles.actionButtonText, { color: '#fff' }]}
+                >
+                  Upload doc
+                </Text>
+              </Pressable>
+            </View>
           ) : null}
 
           {libraryView === 'trash' && docs.length > 0 ? (
@@ -803,25 +816,33 @@ export default function DocumentsPage() {
                     { backgroundColor: C.primaryDim, borderColor: C.cardBorder },
                   ]}
                 >
-                  <FolderOpen size={36} color={C.muted} strokeWidth={1.5} />
+                  {(search.trim().length > 0 || subjectFilter !== 'ALL' || fileTypeFilter !== 'ALL') ? (
+                    <Search size={36} color={C.muted} strokeWidth={1.5} />
+                  ) : (
+                    <FolderOpen size={36} color={C.muted} strokeWidth={1.5} />
+                  )}
                 </View>
                 <Text style={[styles.emptyTitle, { color: C.textSecondary }]}>
-                  {libraryView === 'shared'
-                    ? 'No shared documents yet'
-                    : libraryView === 'starred'
-                      ? 'No starred documents yet'
-                      : libraryView === 'trash'
-                        ? 'Trash is empty'
-                        : 'No documents yet'}
+                  {(search.trim().length > 0 || subjectFilter !== 'ALL' || fileTypeFilter !== 'ALL')
+                    ? 'No results found'
+                    : libraryView === 'shared'
+                      ? 'No shared documents yet'
+                      : libraryView === 'starred'
+                        ? 'No starred documents yet'
+                        : libraryView === 'trash'
+                          ? 'Trash is empty'
+                          : 'No documents yet'}
                 </Text>
                 <Text style={[styles.emptySubtitle, { color: C.muted }]}>
-                  {libraryView === 'shared'
-                    ? 'Documents shared with your account will appear here.'
-                    : libraryView === 'starred'
-                      ? 'Star important documents to find them quickly.'
-                      : libraryView === 'trash'
-                        ? 'Documents moved to trash will appear here.'
-                    : 'Tap the + button to upload your first document'}
+                  {(search.trim().length > 0 || subjectFilter !== 'ALL' || fileTypeFilter !== 'ALL')
+                    ? 'Try adjusting your search query or filters to find what you are looking for.'
+                    : libraryView === 'shared'
+                      ? 'Documents shared with your account will appear here.'
+                      : libraryView === 'starred'
+                        ? 'Star important documents to find them quickly.'
+                        : libraryView === 'trash'
+                          ? 'Documents moved to trash will appear here.'
+                          : 'Tap the + button to upload your first document'}
                 </Text>
               </View>
             ) : libraryView !== 'mine' ? (
@@ -1214,7 +1235,7 @@ export default function DocumentsPage() {
         <Pressable style={styles.overlay} onPress={closeUpload}>
           <Pressable
             style={[styles.sheet, { backgroundColor: C.card }]}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <View style={[styles.sheetHandle, { backgroundColor: C.cardBorder }]} />
             <View style={styles.sheetHeader}>
@@ -1454,7 +1475,7 @@ export default function DocumentsPage() {
         >
           <Pressable
             style={[styles.sheet, { backgroundColor: C.card }]}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <View
               style={[styles.sheetHandle, { backgroundColor: C.cardBorder }]}
@@ -1573,7 +1594,7 @@ export default function DocumentsPage() {
       </Modal>
       <Modal visible={showFilters} transparent animationType="slide" onRequestClose={() => setShowFilters(false)}>
         <Pressable style={styles.overlay} onPress={() => setShowFilters(false)}>
-          <Pressable style={[styles.sheet, { backgroundColor: C.card }]} onPress={() => {}}>
+          <Pressable style={[styles.sheet, { backgroundColor: C.card }]} onPress={() => { }}>
             <View style={[styles.sheetHandle, { backgroundColor: C.cardBorder }]} />
             <View style={styles.sheetHeader}>
               <View>
@@ -1999,4 +2020,12 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   emptyPicker: { alignItems: 'center', padding: Spacing.xl, gap: 4 },
+  searchShortcutBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 })

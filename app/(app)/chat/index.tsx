@@ -39,9 +39,12 @@ import {
   ChatThreadItem,
 } from '../../../services/chatApi'
 import { listDocuments } from '../../../services/documentApi'
+import Input from '../../../components/ui/Input'
 import type { AskPayload } from '../../../types/chat'
 import type { DocumentItem } from '../../../types/document'
 import { normalizeAccessibleDocuments } from '../../../utils/accessibleDocuments'
+import { useLocalSearchParams, useFocusEffect } from 'expo-router'
+import { matchesQuery } from '../../../utils/searchUtils'
 import {
   getDocumentSubjectId,
   getDocumentSubjectKey,
@@ -71,10 +74,12 @@ function timeAgo(isoDate: string): string {
 }
 
 export default function ChatIndexPage() {
+  const { documentId } = useLocalSearchParams<{ documentId?: string }>()
   const C = useColors()
 
   const [inChatMode, setInChatMode] = useState(false)
   const [activeTab, setActiveTab] = useState<'context' | 'history'>('context')
+  const [searchQuery, setSearchQuery] = useState('')
 
   const [messages, setMessages] = useState<Message[]>([WELCOME_MSG])
   const [input, setInput] = useState('')
@@ -98,7 +103,19 @@ export default function ChatIndexPage() {
     [docsById, selectedDocIds],
   )
   const selectedSubjectKey = selectedDocs[0] ? getDocumentSubjectKey(selectedDocs[0]) : undefined
-  const semesterGroups = useMemo(() => groupDocsBySemester(docs), [docs])
+  
+  const filteredDocs = useMemo(() => {
+    if (!searchQuery.trim()) return docs
+    const q = searchQuery.trim()
+    return docs.filter((doc) => matchesQuery(doc.title, q) || matchesQuery(doc.fileName || '', q))
+  }, [docs, searchQuery])
+  const semesterGroups = useMemo(() => groupDocsBySemester(filteredDocs), [filteredDocs])
+
+  const filteredThreads = useMemo(() => {
+    if (!searchQuery.trim()) return threads
+    const q = searchQuery.trim()
+    return threads.filter((t) => matchesQuery(t.title || '', q))
+  }, [threads, searchQuery])
 
   const selectedContextLabel = useMemo(() => {
     if (selectedDocs.length === 0) return 'Choose subject'
@@ -139,12 +156,27 @@ export default function ChatIndexPage() {
 
   useEffect(() => {
     isMountedRef.current = true
-    loadDocs()
-    loadHistory()
     return () => {
       isMountedRef.current = false
     }
-  }, [loadDocs, loadHistory])
+  }, [])
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDocs()
+      loadHistory()
+    }, [loadDocs, loadHistory])
+  )
+
+  const handledDocIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (documentId && documentId !== handledDocIdRef.current && docsById.has(documentId) && !inChatMode) {
+      handledDocIdRef.current = documentId
+      setSelectedDocIds([documentId])
+      setInChatMode(true)
+    }
+  }, [documentId, docsById, inChatMode])
 
   const newChat = () => {
     setMessages([WELCOME_MSG])
@@ -245,7 +277,12 @@ export default function ChatIndexPage() {
     const subjectId = firstDoc ? getDocumentSubjectId(firstDoc) : undefined
 
     if (selectedDocs.length === 0) {
-      throw new Error('Please choose a subject before chatting.')
+      // General chat across the library (or without context)
+      return {
+        question,
+        threadId: currentThreadId,
+        scope: 'library_all',
+      }
     }
 
     const payload: AskPayload = {
@@ -271,11 +308,6 @@ export default function ChatIndexPage() {
   const sendMessage = async () => {
     const text = input.trim()
     if (!text || sending) return
-    if (!hasStudyContext) {
-      setInChatMode(false)
-      setActiveTab('context')
-      return
-    }
 
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     setMessages((prev) => [...prev, { id: Date.now().toString(), role: 'user', content: text, time: now }])
@@ -541,6 +573,23 @@ export default function ChatIndexPage() {
                 </Pressable>
               </View>
 
+              {/* Search Bar */}
+              <View style={{ paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm }}>
+                <Input
+                  placeholder={activeTab === 'context' ? 'Search documents...' : 'Search chat history...'}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  leftIcon={<Search size={16} color={C.muted} />}
+                  containerStyle={{
+                    backgroundColor: C.cardElevated,
+                    borderRadius: 12,
+                    borderColor: C.cardBorder,
+                    borderWidth: 1,
+                  }}
+                  style={{ height: 40, paddingHorizontal: Spacing.sm, fontSize: FontSize.sm, color: C.text }}
+                />
+              </View>
+
               {activeTab === 'context' ? (
                 // Context selection panel inline
                 <View style={S.flex}>
@@ -553,6 +602,12 @@ export default function ChatIndexPage() {
                     <View style={S.panelEmpty}>
                       <FileText size={32} color={C.muted} strokeWidth={1.5} />
                       <Text style={S.panelEmptyText}>No documents yet</Text>
+                    </View>
+                  ) : semesterGroups.length === 0 ? (
+                    <View style={S.panelEmpty}>
+                      <Search size={32} color={C.muted} strokeWidth={1.5} />
+                      <Text style={S.panelEmptyText}>No results found</Text>
+                      <Text style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>Try adjusting your search query</Text>
                     </View>
                   ) : (
                     <ScrollView showsVerticalScrollIndicator={false} style={[S.panelScroll, { paddingHorizontal: Spacing.md }]}>
@@ -639,11 +694,13 @@ export default function ChatIndexPage() {
                     </ScrollView>
                   )}
 
-                  {selectedDocIds.length > 0 && (
-                    <Pressable style={S.startChatBtn} onPress={() => setInChatMode(true)}>
-                      <Text style={S.startChatBtnText}>Start Chat Session ({selectedDocIds.length} doc{selectedDocIds.length > 1 ? 's' : ''})</Text>
-                    </Pressable>
-                  )}
+                  <Pressable style={S.startChatBtn} onPress={() => setInChatMode(true)}>
+                    <Text style={S.startChatBtnText}>
+                      {selectedDocIds.length > 0 
+                        ? `Start Chat Session (${selectedDocIds.length} doc${selectedDocIds.length > 1 ? 's' : ''})`
+                        : 'Start General Chat'}
+                    </Text>
+                  </Pressable>
                 </View>
               ) : (
                 // Chat History panel inline
@@ -658,9 +715,15 @@ export default function ChatIndexPage() {
                       <MessageCircle size={36} color={C.muted} strokeWidth={1.5} />
                       <Text style={S.emptyText}>No conversations yet</Text>
                     </View>
+                  ) : filteredThreads.length === 0 ? (
+                    <View style={S.emptyBox}>
+                      <Search size={36} color={C.muted} strokeWidth={1.5} />
+                      <Text style={S.emptyText}>No results found</Text>
+                      <Text style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>Try adjusting your search query</Text>
+                    </View>
                   ) : (
                     <ScrollView showsVerticalScrollIndicator={false} style={{ paddingHorizontal: Spacing.md }}>
-                      {threads.map((item) => (
+                      {filteredThreads.map((item) => (
                         <Pressable key={item.id || item._id} style={S.histItem} onPress={() => openSavedThread(item)}>
                           <View style={S.histIcon}>
                             <MessageCircle size={16} color={C.primary} />
@@ -759,8 +822,8 @@ export default function ChatIndexPage() {
                     <Search size={19} color={C.primary} />
                   </Pressable>
                   <TextInput
-                    style={[S.textInput, !hasStudyContext && S.textInputDisabled]}
-                    placeholder={hasStudyContext ? 'Ask AI about your study material...' : 'Choose a subject first...'}
+                    style={S.textInput}
+                    placeholder={hasStudyContext ? 'Ask AI about your study material...' : 'Ask a general question...'}
                     placeholderTextColor={C.muted}
                     value={input}
                     onChangeText={(t) => {
@@ -771,10 +834,10 @@ export default function ChatIndexPage() {
                   />
                   <Pressable
                     onPress={sendMessage}
-                    disabled={!input.trim() || sending || !hasStudyContext}
-                    style={[S.sendBtn, (!input.trim() || sending || !hasStudyContext) && S.sendBtnDisabled]}
+                    disabled={!input.trim() || sending}
+                    style={[S.sendBtn, (!input.trim() || sending) && S.sendBtnDisabled]}
                   >
-                    <Send size={18} color={input.trim() && !sending && hasStudyContext ? '#fff' : C.muted} />
+                    <Send size={18} color={input.trim() && !sending ? '#fff' : C.muted} />
                   </Pressable>
                 </View>
               </View>

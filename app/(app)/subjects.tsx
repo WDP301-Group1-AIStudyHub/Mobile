@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -12,11 +12,13 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { BookOpen, Edit2, Plus, Trash2, X, FolderOpen } from 'lucide-react-native'
+import { BookOpen, Edit2, Plus, Trash2, X, FolderOpen, Search } from 'lucide-react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import Card from '../../components/ui/Card'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
+import Input from '../../components/ui/Input'
+import { matchesQuery } from '../../utils/searchUtils'
 import {
   createSubject,
   deleteSubject,
@@ -66,6 +68,28 @@ export default function SubjectsPage() {
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+
+  const [search, setSearch] = useState('')
+  const [semesterFilter, setSemesterFilter] = useState('ALL')
+
+  const semesters = useMemo(() => {
+    const s = new Set<string>()
+    subjects.forEach((sub) => {
+      if (sub.semester) s.add(sub.semester)
+    })
+    return Array.from(s).sort()
+  }, [subjects])
+
+  const filteredSubjects = useMemo(() => {
+    let res = subjects
+    if (search.trim()) {
+      res = res.filter(s => matchesQuery(s.name, search) || matchesQuery(s.code || '', search))
+    }
+    if (semesterFilter !== 'ALL') {
+      res = res.filter(s => s.semester === semesterFilter)
+    }
+    return res
+  }, [subjects, search, semesterFilter])
 
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -207,6 +231,39 @@ export default function SubjectsPage() {
             </View>
           </View>
 
+          <View style={styles.searchRow}>
+            <Input
+              placeholder="Search subjects"
+              value={search}
+              onChangeText={setSearch}
+              leftIcon={<Search size={16} color={C.muted} />}
+              containerStyle={[styles.searchInput, { backgroundColor: C.cardElevated, borderColor: C.cardBorder }]}
+              style={[styles.compactInput, { color: C.text }]}
+              placeholderTextColor={C.muted}
+            />
+          </View>
+          {semesters.length > 0 ? (
+            <View style={{ marginBottom: Spacing.md }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.sm }}>
+                <Pressable
+                  onPress={() => setSemesterFilter('ALL')}
+                  style={[styles.filterChip, { borderColor: C.cardBorder, backgroundColor: semesterFilter === 'ALL' ? C.primary : C.cardElevated }]}
+                >
+                  <Text style={[styles.filterChipText, semesterFilter === 'ALL' ? { color: '#fff' } : { color: C.textSecondary }]}>All Semesters</Text>
+                </Pressable>
+                {semesters.map((sem) => (
+                  <Pressable
+                    key={sem}
+                    onPress={() => setSemesterFilter(sem)}
+                    style={[styles.filterChip, { borderColor: C.cardBorder, backgroundColor: semesterFilter === sem ? C.primary : C.cardElevated }]}
+                  >
+                    <Text style={[styles.filterChipText, semesterFilter === sem ? { color: '#fff' } : { color: C.textSecondary }]}>{sem}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
           <ScrollView
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
@@ -243,8 +300,25 @@ export default function SubjectsPage() {
                   Tap "New" to create your first subject.
                 </Text>
               </View>
+            ) : filteredSubjects.length === 0 ? (
+              <View style={styles.empty}>
+                <View
+                  style={[
+                    styles.emptyIcon,
+                    { backgroundColor: C.primaryDim, borderColor: C.cardBorder },
+                  ]}
+                >
+                  <Search size={36} color={C.muted} />
+                </View>
+                <Text style={[styles.emptyText, { color: C.textSecondary }]}>
+                  No results found
+                </Text>
+                <Text style={[styles.emptyDesc, { color: C.muted }]}>
+                  Try adjusting your search or filter.
+                </Text>
+              </View>
             ) : (
-              subjects.map((item, index) => {
+              filteredSubjects.map((item, index) => {
                 // Truyền key an toàn, fallback về index nếu data thực sự bị lỗi mất ID
                 const safeKey = getSafeId(item) || `fallback-key-${index}`;
                 return (
@@ -517,7 +591,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   emptyText: { fontSize: FontSize.md, fontWeight: '700' },
-  emptyDesc: { fontSize: FontSize.sm, textAlign: 'center' },
+  emptyDesc: {
+    fontSize: FontSize.sm,
+    textAlign: 'center',
+  },
+  searchRow: {
+    marginBottom: Spacing.md,
+  },
+  searchInput: {
+    height: 48,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+  },
+  compactInput: {
+    fontSize: FontSize.sm,
+    marginLeft: Spacing.xs,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   colorChip: { width: 6, height: 44, borderRadius: 3 },
   rowInfo: { flex: 1 },
