@@ -107,8 +107,10 @@ export default function AdminLayout() {
   useEffect(() => {
     if (state.status === 'unauthenticated') {
       router.replace('/(auth)/login')
+    } else if (state.status === 'authenticated' && state.user.role !== 'admin') {
+      router.replace('/(app)/dashboard')
     }
-  }, [state.status])
+  }, [state])
 
   const styles = useMemo(() => StyleSheet.create({
   tabBar: {
@@ -128,7 +130,7 @@ export default function AdminLayout() {
   },
 }), [C])
 
-  if (state.status !== 'authenticated') {
+  if (state.status !== 'authenticated' || state.user.role !== 'admin') {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.background }}>
         <ActivityIndicator size="large" color={C.primary} />
@@ -206,6 +208,8 @@ export default function AdminLayout() {
         name="change-password"
         options={{ href: null }}
       />
+      <Tabs.Screen name="storage" options={{ href: null }} />
+      <Tabs.Screen name="payments" options={{ href: null }} />
     </Tabs>
   )
 }
