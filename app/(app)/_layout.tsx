@@ -5,6 +5,7 @@ import { View, StyleSheet, Platform, ActivityIndicator } from 'react-native'
 
 import { useColors } from '../../contexts/ThemeContext'
 import { useAuth } from '../../hooks/useAuth'
+import { refreshStorage } from '../../hooks/useStorage'
 
 const tabIconStyles = StyleSheet.create({
   iconWrap: {
@@ -54,6 +55,14 @@ export default function AppLayout() {
       })
     }
   }, [pathname, state.status])
+
+  // Loaded once here so both upload guards and the dashboard bar can answer
+  // "does this file fit?" without each screen fetching for itself.
+  useEffect(() => {
+    if (state.status === 'authenticated') {
+      void refreshStorage()
+    }
+  }, [state.status])
 
   const styles = useMemo(() => StyleSheet.create({
     tabBar: {
@@ -143,6 +152,7 @@ export default function AppLayout() {
         options={{ href: null }}
       />
       <Tabs.Screen name="evaluation" options={{ href: null }} />
+      <Tabs.Screen name="storage" options={{ href: null }} />
       <Tabs.Screen name="subject/[id]" options={{ href: null }} />
       {/* chat/[id] and chat/artifacts are intentionally NOT registered here — they are owned by chat/_layout.tsx Stack */}
       <Tabs.Screen

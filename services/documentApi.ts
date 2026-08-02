@@ -4,7 +4,6 @@ import type {
   DocumentFilter,
   DocumentShare,
   DocumentSharePermission,
-  DocumentVersion,
   UpdateSharedDocumentProfilePayload,
   UpdateDocumentPayload,
   UploadDocumentPayload,
@@ -298,43 +297,4 @@ export async function resendDocumentShareEmail(
   )
   if (!data.data) throw new Error(data.message || 'Unable to resend email')
   return data.data
-}
-
-export async function updateDocumentVersion(
-  documentId: string,
-  payload: {
-    file: { uri: string; name: string; type: string; size?: number }
-    uploadMode: 'OVERRIDE' | 'APPEND'
-    uploadReason?: string
-    makeActive?: boolean
-  }
-): Promise<DocumentVersion> {
-  const form = new FormData()
-  form.append('file', {
-    uri: payload.file.uri,
-    name: payload.file.name,
-    type: payload.file.type,
-  } as unknown as Blob)
-  form.append('uploadMode', payload.uploadMode)
-  if (payload.uploadReason) form.append('uploadReason', payload.uploadReason)
-  if (payload.makeActive !== undefined) {
-    form.append('makeActive', String(payload.makeActive))
-  }
-
-  const { data } = await apiClient.post<ApiResponse<DocumentVersion>>(
-    `/api/documents/${documentId}/versions`,
-    form,
-    {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }
-  )
-  if (!data.data) throw new Error(data.message || 'Version update failed')
-  return data.data
-}
-
-export async function getDocumentVersions(documentId: string): Promise<DocumentVersion[]> {
-  const { data } = await apiClient.get<{ data?: DocumentVersion[] }>(
-    `/api/documents/${documentId}/versions`
-  )
-  return data.data ?? []
 }

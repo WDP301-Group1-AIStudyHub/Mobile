@@ -1,26 +1,8 @@
 export type DocumentVisibility = 'PUBLIC' | 'PRIVATE'
 export type DocumentStatus = 'ACTIVE' | 'ARCHIVED' | 'DELETED'
-export type UploadMode = 'OVERRIDE' | 'APPEND'
-export type ProcessingStage = 'UPLOADED' | 'EXTRACTING_TEXT' | 'CHUNKING' | 'EMBEDDING' | 'UPSERTING_VECTOR' | 'COMPLETED' | 'FAILED'
 export type DocumentAccessRole = 'OWNER' | 'EDITOR' | 'VIEWER'
 export type DocumentSharePermission = 'VIEW' | 'EDIT'
 export type EmailDeliveryStatus = 'ACCEPTED' | 'FAILED' | 'SKIPPED'
-
-export interface DocumentVersion {
-  id: string
-  versionNumber: number
-  uploadMode: UploadMode
-  fileUrl: string
-  fileName: string
-  fileSize: number
-  fileType: string
-  totalChunks: number
-  uploadReason?: string
-  uploadedBy: string
-  processingStage: ProcessingStage
-  createdAt: string
-  updatedAt: string
-}
 
 export interface DocumentMetadata {
   tags?: string[]
@@ -72,9 +54,6 @@ export interface DocumentItem {
   metadata?: DocumentMetadata
   accessInfo?: DocumentAccessInfo
 
-  // Version info
-  totalVersions?: number
-  currentVersionId?: string
   totalChunks?: number
 
   // Indexing
