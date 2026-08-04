@@ -41,12 +41,14 @@ export type TransactionStatus =
 export interface StorageTransaction {
   id: string
   orderRef: string
+  providerOrderCode?: number | null
   status: TransactionStatus
-  provider: 'VNPAY' | 'MOCK'
+  provider: 'PAYOS' | 'VNPAY' | 'MOCK'
   amountVnd: number
   currency: string
   clientPlatform: 'WEB' | 'MOBILE'
   paymentUrl: string
+  paymentLinkId?: string
   package: {
     code: string
     name: string
@@ -70,10 +72,11 @@ export interface StorageTransactionSnapshot {
 
 export interface PurchaseOrder {
   orderRef: string
+  providerOrderCode?: number | null
   /** False for free packages, which activate without a gateway round trip. */
   requiresPayment: boolean
   paymentUrl: string
-  provider: 'VNPAY' | 'MOCK'
+  provider: 'PAYOS' | 'VNPAY' | 'MOCK'
   amountVnd: number
   expiresAt: string
   package: StoragePackage
