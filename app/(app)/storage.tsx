@@ -171,9 +171,13 @@ export default function StorageScreen() {
     (pkg: StoragePackage): string | null => {
       if (pkg.id === currentPackageId) return null
 
+      // A purchase REPLACES quota rather than adding to it, so buying anything
+      // with less capacity than the current plan is always a paid
+      // self-downgrade. This also covers returning to Free, since Free is
+      // always the smallest plan.
       const currentPackage = storage?.package
-      if (pkg.priceVnd === 0 && currentPackage && currentPackage.priceVnd > 0) {
-        return 'The Free plan cannot be selected after upgrading.'
+      if (currentPackage && pkg.capacityBytes < currentPackage.capacityBytes) {
+        return `Downgrading from ${currentPackage.name} to ${pkg.name} isn't supported.`
       }
 
       const committed = (storage?.usedBytes ?? 0) + (storage?.reservedBytes ?? 0)
@@ -486,9 +490,10 @@ export default function StorageScreen() {
               packages.map((pkg) => {
                 const isCurrent = pkg.id === currentPackageId
                 const reason = blockReason(pkg)
-                const hideAction =
-                  pkg.priceVnd === 0 &&
-                  Boolean(storage?.package && storage.package.priceVnd > 0)
+                const hideAction = Boolean(
+                  storage?.package &&
+                    pkg.capacityBytes < storage.package.capacityBytes,
+                )
 
                 return (
                   <Pressable
