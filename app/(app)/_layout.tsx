@@ -6,6 +6,7 @@ import { View, StyleSheet, Platform, ActivityIndicator } from 'react-native'
 import { useColors } from '../../contexts/ThemeContext'
 import { useAuth } from '../../hooks/useAuth'
 import { refreshStorage } from '../../hooks/useStorage'
+import { refreshAiUsage } from '../../hooks/useAiUsage'
 
 const tabIconStyles = StyleSheet.create({
   iconWrap: {
@@ -61,6 +62,7 @@ export default function AppLayout() {
   useEffect(() => {
     if (state.status === 'authenticated') {
       void refreshStorage()
+      void refreshAiUsage()
     }
   }, [state.status])
 
@@ -153,6 +155,7 @@ export default function AppLayout() {
       />
       <Tabs.Screen name="evaluation" options={{ href: null }} />
       <Tabs.Screen name="storage" options={{ href: null }} />
+      <Tabs.Screen name="shared-summaries" options={{ href: null }} />
       <Tabs.Screen name="subject/[id]" options={{ href: null }} />
       {/* chat/[id] and chat/artifacts are intentionally NOT registered here — they are owned by chat/_layout.tsx Stack */}
       <Tabs.Screen

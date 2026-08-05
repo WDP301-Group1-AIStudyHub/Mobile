@@ -20,6 +20,7 @@ import {
   Shield,
   Sparkles,
   User,
+  Users,
 } from 'lucide-react-native'
 import Card from '../../components/ui/Card'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
@@ -30,7 +31,7 @@ import { listDocuments } from '../../services/documentApi'
 import { listSubjects } from '../../services/subjectApi'
 import { normalizeAccessibleDocuments } from '../../utils/accessibleDocuments'
 
-type MenuKey = 'profile' | 'password' | 'notifications' | 'subjects' | 'storage' | 'model' | 'security' | 'settings'
+type MenuKey = 'profile' | 'password' | 'notifications' | 'subjects' | 'storage' | 'sharedSummaries' | 'model' | 'security' | 'settings'
 
 export default function ProfilePage() {
   const { state, signOut } = useAuth()
@@ -77,6 +78,7 @@ export default function ProfilePage() {
       items: [
         { icon: BookOpen, label: 'My Subjects', key: 'subjects' as MenuKey, color: C.accentTeal },
         { icon: HardDrive, label: 'Storage plan', key: 'storage' as MenuKey, color: C.primary },
+        { icon: Users, label: 'Summaries shared with me', key: 'sharedSummaries' as MenuKey, color: C.accentTeal },
         { icon: Sparkles, label: 'AI Model', key: 'model' as MenuKey, color: C.accent },
       ],
     },
@@ -164,6 +166,8 @@ export default function ProfilePage() {
       if (user?.role !== 'admin') {
         router.push('/(app)/storage')
       }
+    } else if (key === 'sharedSummaries') {
+      router.push('/(app)/shared-summaries')
     }
   }
 
