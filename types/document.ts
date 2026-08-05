@@ -68,6 +68,11 @@ export interface DocumentItem {
   trashDaysRemaining?: number | null
   accessRole?: DocumentAccessRole
   isShared?: boolean
+  // Strict `document.ownerId === current user`. Distinct from accessRole,
+  // which also reads "OWNER" for admins and subject-workspace owners — using
+  // accessRole for owner-gated AI features would let them spend the real
+  // uploader's quota. Only present on the single-document GET, not on lists.
+  isOwner?: boolean
   sharedBy?: {
     id: string
     fullName: string
