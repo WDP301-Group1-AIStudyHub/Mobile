@@ -40,12 +40,12 @@ export async function login(payload: LoginPayload): Promise<AuthUser> {
   }
 }
 
-export async function register(payload: RegisterPayload): Promise<AuthUser> {
+export async function register(payload: RegisterPayload): Promise<AuthResponse> {
   try {
     const { data } = await apiClient.post<ApiResponse<AuthResponse>>('/api/auth/register', payload)
     if (!data.data) throw new AuthApiError('No data returned', 500)
     await storeAuthSession(data.data.accessToken, data.data.user)
-    return data.data.user
+    return data.data
   } catch (error) {
     return handleAxiosError(error)
   }

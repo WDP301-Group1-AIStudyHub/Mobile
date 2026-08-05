@@ -28,12 +28,12 @@ export function getSubjectName(subject: unknown, fallback = 'Uncategorized'): st
 }
 
 export function getDocumentSubjectName(doc?: DocumentItem, fallback = 'Uncategorized'): string {
-  return getSubjectName(doc?.subject, fallback)
+  return getSubjectName(doc?.personalSubject ?? doc?.subject, fallback)
 }
 
 export function getDocumentSubjectId(doc?: DocumentItem): string | undefined {
-  const subjectObject = getSubjectObject(doc?.subject)
-  return doc?.subjectId || subjectObject?._id || subjectObject?.id
+  const subjectObject = getSubjectObject(doc?.personalSubject ?? doc?.subject)
+  return doc?.personalSubjectId || doc?.subjectId || subjectObject?._id || subjectObject?.id
 }
 
 export function getDocumentSubjectKey(doc?: DocumentItem): string {
@@ -41,11 +41,11 @@ export function getDocumentSubjectKey(doc?: DocumentItem): string {
 }
 
 export function getDocumentSubjectColor(doc?: DocumentItem, fallback = '#496b55'): string {
-  return getSubjectObject(doc?.subject)?.color || fallback
+  return getSubjectObject(doc?.personalSubject ?? doc?.subject)?.color || fallback
 }
 
 export function getDocumentSemester(doc?: DocumentItem): string {
-  const subjectSemester = getSubjectObject(doc?.subject)?.semester?.trim()
+  const subjectSemester = getSubjectObject(doc?.personalSubject ?? doc?.subject)?.semester?.trim()
   return subjectSemester || doc?.metadata?.semester || getSemesterLabel(doc?.createdAt)
 }
 

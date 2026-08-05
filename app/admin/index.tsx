@@ -9,7 +9,9 @@ import {
   Users,
   MessageSquare,
   BookOpen,
-  HeartPulse
+  HeartPulse,
+  HardDrive,
+  CreditCard
 } from 'lucide-react-native'
 import Card from '../../components/ui/Card'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
@@ -241,6 +243,24 @@ export default function AdminDashboard() {
               </Card>
             )
           })}
+        </View>
+
+        {/* Platform Health */}
+        <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg }}>
+          <Pressable style={{ flex: 1 }} onPress={() => router.push('/admin/storage' as never)}>
+            <Card elevated padding="md">
+              <HardDrive size={20} color={C.primary} />
+              <Text style={{ color: C.text, fontWeight: '700', marginTop: 8 }}>Storage</Text>
+              <Text style={{ color: C.muted, fontSize: FontSize.xs, marginTop: 3 }}>Quota and packages</Text>
+            </Card>
+          </Pressable>
+          <Pressable style={{ flex: 1 }} onPress={() => router.push('/admin/payments' as never)}>
+            <Card elevated padding="md">
+              <CreditCard size={20} color={C.accentTeal} />
+              <Text style={{ color: C.text, fontWeight: '700', marginTop: 8 }}>Payments</Text>
+              <Text style={{ color: C.muted, fontSize: FontSize.xs, marginTop: 3 }}>Audit and pending orders</Text>
+            </Card>
+          </Pressable>
         </View>
 
         {/* Platform Health */}

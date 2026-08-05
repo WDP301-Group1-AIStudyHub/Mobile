@@ -7,6 +7,7 @@ expo-env.d.ts
 
 node_modules/
 .expo/
+.expo-export-check/
 expo-start.log
 
 # Environment variables

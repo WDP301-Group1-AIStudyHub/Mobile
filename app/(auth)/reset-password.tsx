@@ -14,7 +14,7 @@ import { ArrowLeft, Eye, EyeOff, Lock } from 'lucide-react-native'
 import BrandLogo from '../../components/ui/BrandLogo'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
-import { FontSize, Spacing } from '../../constants/colors'
+import { FontSize, Radius, Spacing } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
 import { resetPassword } from '../../services/authApi'
 
@@ -109,7 +109,7 @@ export default function ResetPasswordPage() {
     fontSize: 30,
     fontWeight: '700',
     color: C.text,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   subtitle: {
     fontSize: 13,
@@ -119,7 +119,7 @@ export default function ResetPasswordPage() {
   },
   card: {
     backgroundColor: C.card,
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: C.cardBorder,
     padding: Spacing.lg,

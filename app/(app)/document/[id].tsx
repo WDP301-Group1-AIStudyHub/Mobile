@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -11,6 +11,7 @@ import {
   View,
   Linking
 } from 'react-native'
+import * as Clipboard from 'expo-clipboard'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, router } from 'expo-router'
 import {
@@ -32,20 +33,46 @@ import {
   ChevronDown,
   ChevronRight,
   AlignLeft,
-  ExternalLink,
   Edit2,
   Trash2,
   X,
   Check,
+  Share2,
+  Star,
+  Sparkles,
+  Copy,
+  Users,
 } from 'lucide-react-native'
 import Card from '../../../components/ui/Card'
-import ThemeToggle from '../../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../../constants/colors'
 import { useColors } from '../../../contexts/ThemeContext'
-import { deleteDocument, getDocument, updateDocument } from '../../../services/documentApi'
+import {
+  deleteDocument,
+  getDocument,
+  getDocumentDownloadUrl,
+  setDocumentStar,
+  updateDocument,
+} from '../../../services/documentApi'
 import { listSubjects } from '../../../services/subjectApi'
+import {
+  createDocumentSummary,
+  getArtifactById,
+  type ArtifactRecord,
+} from '../../../services/artifactApi'
+import { getApiErrorDetails } from '../../../services/apiClient'
 import type { DocumentItem, DocumentVisibility } from '../../../types/document'
 import type { SubjectItem } from '../../../types/subject'
+import DocumentShareSheet from '../../../components/documents/document-share-sheet'
+import SharedDocumentSubjectSheet from '../../../components/documents/shared-document-subject-sheet'
+import SummaryShareSheet from '../../../components/artifacts/summary-share-sheet'
+import SummaryMarkdown from '../../../components/artifacts/SummaryMarkdown'
+import { useAuth } from '../../../hooks/useAuth'
+import { useAiUsage, refreshAiUsage } from '../../../hooks/useAiUsage'
+import { deriveAiPlanState } from '../../../utils/aiPlanState'
+import { formatBytes } from '../../../utils/formatBytes'
+
+const SUMMARY_POLL_INTERVAL_MS = 2000
+const SUMMARY_POLL_TIMEOUT_MS = 90000
 
 const getSafeId = (item: unknown): string => {
   if (!item || typeof item !== 'object') return ''
@@ -61,12 +88,6 @@ function getSubjectName(subject: unknown, fallback = 'Uncategorized'): string {
     if (typeof name === 'string' && name.length > 0) return name
   }
   return fallback
-}
-
-function formatBytes(bytes: number): string {
-  if (!bytes || bytes < 1024) return `${bytes || 0} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function fileTypeColorFn(type: string | undefined, C: ReturnType<typeof useColors>): string {
@@ -113,6 +134,9 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexShrink: 1,
+    flexWrap: 'wrap',
     gap: Spacing.sm,
   },
   headerIconBtn: {
@@ -134,7 +158,7 @@ const styles = StyleSheet.create({
   titleText: {
     fontSize: FontSize.xl,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   loadingWrap: {
     flex: 1,
@@ -148,7 +172,7 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 64,
     height: 64,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -251,6 +275,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.sm,
   },
+  actionStack: {
+    gap: Spacing.sm,
+  },
   actionBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -258,6 +285,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 14,
+    borderRadius: Radius.lg,
+  },
+  actionBtnFull: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 15,
     borderRadius: Radius.lg,
   },
   actionBtnText: {
@@ -271,8 +306,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
     padding: Spacing.lg,
     paddingBottom: 40,
     maxHeight: '88%',
@@ -369,16 +404,40 @@ const styles = StyleSheet.create({
 export default function DocumentDetailsPage() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const C = useColors()
+  const { state } = useAuth()
+  const currentUser = state.status === 'authenticated' ? state.user : null
   const [doc, setDoc] = useState<DocumentItem | null>(null)
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
   const [showSubjectPicker, setShowSubjectPicker] = useState(false)
+  const [showShare, setShowShare] = useState(false)
+  const [showSharedSubject, setShowSharedSubject] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [starring, setStarring] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [editVisibility, setEditVisibility] = useState<DocumentVisibility>('PRIVATE')
   const [editSubject, setEditSubject] = useState<SubjectItem | null>(null)
+  const [summaryRecord, setSummaryRecord] = useState<ArtifactRecord | null>(null)
+  const [summaryPhase, setSummaryPhase] = useState<
+    'idle' | 'starting' | 'polling' | 'done' | 'error'
+  >('idle')
+  const [summaryError, setSummaryError] = useState<{
+    code?: string
+    message: string
+    details?: Record<string, unknown>
+  } | null>(null)
+  const [showSummaryShare, setShowSummaryShare] = useState(false)
+  const { usage: aiUsage } = useAiUsage()
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -418,6 +477,14 @@ export default function DocumentDetailsPage() {
   const label = fileTypeLabel(doc.fileType)
   const isPublic = doc.visibility === 'PUBLIC'
   const contentLength = doc.extractedText?.length || 0
+  const accessRole =
+    doc.accessRole ||
+    (currentUser && (doc.ownerId === currentUser.id || currentUser.role === 'admin')
+      ? 'OWNER'
+      : 'VIEWER')
+  const canEdit = accessRole === 'OWNER' || accessRole === 'EDITOR'
+  const canManage = accessRole === 'OWNER'
+  const canClassifyShared = Boolean(doc.isShared && accessRole !== 'OWNER')
 
   const subjectName = getSubjectName(doc.subject)
 
@@ -455,8 +522,12 @@ export default function DocumentDetailsPage() {
       const updated = await updateDocument(id, {
         title: editTitle.trim(),
         description: editDesc.trim() || undefined,
-        subjectId: editSubject ? getSafeId(editSubject) : undefined,
-        visibility: editVisibility,
+        ...(canManage
+          ? {
+              subjectId: editSubject ? getSafeId(editSubject) : undefined,
+              visibility: editVisibility,
+            }
+          : {}),
       })
       setDoc(updated)
       setShowEdit(false)
@@ -469,14 +540,15 @@ export default function DocumentDetailsPage() {
   }
 
   const confirmDelete = () => {
-    Alert.alert('Delete Document', `Delete "${doc.title}"? This cannot be undone.`, [
+    Alert.alert('Move to Trash', `Move "${doc.title}" to Trash? You can restore it within 30 days.`, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Delete',
+        text: 'Move to Trash',
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteDocument(id)
+            const result = await deleteDocument(id)
+            if (result.warning) Alert.alert('Moved to Trash', result.warning)
             router.replace('/(app)/documents')
           } catch (e) {
             const msg = e instanceof Error ? e.message : 'Could not delete document.'
@@ -485,6 +557,120 @@ export default function DocumentDetailsPage() {
         },
       },
     ])
+  }
+
+  const toggleStar = async () => {
+    const nextStarred = !doc.isStarred
+    setStarring(true)
+    setDoc((current) => (current ? { ...current, isStarred: nextStarred } : current))
+    try {
+      const updated = await setDocumentStar(id, nextStarred)
+      setDoc(updated)
+    } catch (e) {
+      setDoc((current) => (current ? { ...current, isStarred: doc.isStarred } : current))
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not update star.')
+    } finally {
+      setStarring(false)
+    }
+  }
+
+  const downloadFile = async () => {
+    try {
+      const { downloadUrl } = await getDocumentDownloadUrl(id)
+      await Linking.openURL(downloadUrl)
+    } catch (error) {
+      Alert.alert(
+        'Download failed',
+        error instanceof Error ? error.message : 'Unable to download document.',
+      )
+    }
+  }
+
+  const pollSummary = async (artifactId: string) => {
+    const startedAt = Date.now()
+
+    for (;;) {
+      if (!isMountedRef.current) return
+
+      try {
+        const updated = await getArtifactById(artifactId)
+        if (!isMountedRef.current) return
+        setSummaryRecord(updated)
+
+        if (updated.status === 'COMPLETED') {
+          setSummaryPhase('done')
+          return
+        }
+        if (updated.status === 'FAILED') {
+          setSummaryPhase('error')
+          setSummaryError({ message: 'Summary generation failed. You can retry.' })
+          return
+        }
+      } catch {
+        // A transient poll failure isn't fatal — keep trying until the timeout.
+      }
+
+      if (Date.now() - startedAt >= SUMMARY_POLL_TIMEOUT_MS) {
+        // Still processing is not a failure — leave the phase as polling so
+        // the UI keeps showing "generating" rather than an error.
+        return
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, SUMMARY_POLL_INTERVAL_MS))
+    }
+  }
+
+  const handleSummarize = async () => {
+    if (!doc) return
+    setSummaryPhase('starting')
+    setSummaryError(null)
+
+    try {
+      const { record, status } = await createDocumentSummary(doc.id)
+      if (!isMountedRef.current) return
+      setSummaryRecord(record)
+
+      if (status === 202) {
+        void refreshAiUsage()
+      }
+
+      if (record.status === 'COMPLETED') {
+        setSummaryPhase('done')
+        return
+      }
+      if (record.status === 'FAILED') {
+        setSummaryPhase('error')
+        setSummaryError({ message: 'Summary generation failed. You can retry.' })
+        return
+      }
+
+      setSummaryPhase('polling')
+      await pollSummary(record._id)
+    } catch (error) {
+      if (!isMountedRef.current) return
+      const details = getApiErrorDetails(error)
+      setSummaryPhase('error')
+
+      if (details.status === 429) {
+        setSummaryError({ code: details.code, message: details.message, details: details.details })
+      } else if (details.status === 400 && details.code === 'DOCUMENT_NOT_READABLE') {
+        Alert.alert(
+          'Document not ready',
+          'This document is not ready to be summarized yet (still processing, or a scanned/image file with no extracted text).',
+        )
+        setSummaryPhase('idle')
+      } else {
+        Alert.alert('Summary failed', details.message || 'Could not generate summary.')
+        setSummaryPhase('idle')
+      }
+    }
+  }
+
+  const copySummary = async () => {
+    const content = summaryRecord?.content
+    if (content && 'markdown' in content) {
+      await Clipboard.setStringAsync(content.markdown)
+    }
   }
 
   return (
@@ -503,18 +689,53 @@ export default function DocumentDetailsPage() {
             </View>
             <View style={styles.headerActions}>
               <Pressable
+                accessibilityLabel={doc.isStarred ? 'Unstar document' : 'Star document'}
+                disabled={starring}
+                style={[styles.headerIconBtn, { backgroundColor: C.cardElevated, borderColor: C.cardBorder }]}
+                onPress={toggleStar}
+              >
+                <Star
+                  size={17}
+                  color={doc.isStarred ? '#F59E0B' : C.muted}
+                  fill={doc.isStarred ? '#F59E0B' : 'transparent'}
+                />
+              </Pressable>
+              {canManage ? (
+              <Pressable
+                accessibilityLabel="Share document"
+                style={[styles.headerIconBtn, { backgroundColor: C.primaryDim, borderColor: C.primary }]}
+                onPress={() => setShowShare(true)}
+              >
+                <Share2 size={17} color={C.primary} />
+              </Pressable>
+              ) : null}
+              {canClassifyShared ? (
+              <Pressable
+                accessibilityLabel="Assign shared document subject"
+                style={[styles.headerIconBtn, { backgroundColor: C.primaryDim, borderColor: C.primary }]}
+                onPress={() => setShowSharedSubject(true)}
+              >
+                <BookOpen size={17} color={C.primary} />
+              </Pressable>
+              ) : null}
+              {canEdit ? (
+              <Pressable
+                accessibilityLabel="Edit document"
                 style={[styles.headerIconBtn, { backgroundColor: C.primaryDim, borderColor: C.primary }]}
                 onPress={openEdit}
               >
                 <Edit2 size={17} color={C.primary} />
               </Pressable>
+              ) : null}
+              {canManage ? (
               <Pressable
+                accessibilityLabel="Delete document"
                 style={[styles.headerIconBtn, { backgroundColor: C.errorDim, borderColor: C.error }]}
                 onPress={confirmDelete}
               >
                 <Trash2 size={17} color={C.error} />
               </Pressable>
-              <ThemeToggle size={38} />
+              ) : null}
             </View>
           </View>
 
@@ -584,13 +805,6 @@ export default function DocumentDetailsPage() {
                 </Text>
               </View>
 
-              <View style={styles.metaRow}>
-                <User size={16} color={C.muted} />
-                <Text style={[styles.metaLabel, { color: C.muted }]}>Author</Text>
-                <Text style={[styles.metaValue, { color: C.text, textAlign: 'right' }]}>
-                  {uploaderName}
-                </Text>
-              </View>
 
               <View style={styles.metaRow}>
                 <Info size={16} color={C.muted} />
@@ -639,12 +853,6 @@ export default function DocumentDetailsPage() {
                     {doc.totalChunks || 0}
                   </Text>
                   <Text style={{ color: C.muted, fontSize: FontSize.sm }}> chunks indexed</Text>
-                </Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={[styles.infoLabel, { color: C.muted }]}>Versions</Text>
-                <Text style={[styles.infoValue, { color: C.text, fontWeight: '600' }]}>
-                  {doc.totalVersions || 1} version(s)
                 </Text>
               </View>
               <View style={styles.infoRow}>
@@ -699,25 +907,110 @@ export default function DocumentDetailsPage() {
             </View>
           </Card>
 
-          {/* Action Button */}
-          <View style={styles.actionRow}>
+          {/* Action Buttons – 2-row layout to avoid text truncation */}
+          <View style={styles.actionStack}>
             {!!doc.fileUrl && (
               <Pressable
-                style={[styles.actionBtn, { backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder }]}
-                onPress={() => Linking.openURL(doc.fileUrl)}
+                style={[styles.actionBtnFull, { backgroundColor: C.primary }]}
+                onPress={() =>
+                  router.push(`/(app)/document/viewer/${id}` as any)
+                }
               >
-                <ExternalLink size={16} color={C.text} />
-                <Text style={[styles.actionBtnText, { color: C.text }]}>Open File</Text>
+                <BookOpen size={16} color="#fff" />
+                <Text style={styles.actionBtnText}>Read Document</Text>
               </Pressable>
             )}
-            <Pressable
-              style={[styles.actionBtn, { backgroundColor: C.primary }]}
-              onPress={() => router.push('/(app)/chat')}
-            >
-              <MessageCircle size={16} color="#fff" />
-              <Text style={styles.actionBtnText}>Chat with Document</Text>
-            </Pressable>
+            
+            {doc.isOwner && summaryPhase !== 'done' && (
+              <Pressable
+                style={[styles.actionBtnFull, { backgroundColor: C.primaryDim, borderWidth: 1, borderColor: C.primary }]}
+                onPress={handleSummarize}
+                disabled={summaryPhase === 'starting' || summaryPhase === 'polling'}
+              >
+                {summaryPhase === 'starting' || summaryPhase === 'polling' ? (
+                  <ActivityIndicator size="small" color={C.primary} />
+                ) : (
+                  <Sparkles size={16} color={C.primary} />
+                )}
+                <Text style={[styles.actionBtnText, { color: C.primary }]}>
+                  {summaryPhase === 'starting' || summaryPhase === 'polling'
+                    ? 'Summarizing...'
+                    : summaryPhase === 'error'
+                      ? 'Retry summary'
+                      : 'Summarize with AI'}
+                </Text>
+              </Pressable>
+            )}
+
+            {doc.isOwner && aiUsage && (
+              <Text style={{ color: C.muted, fontSize: FontSize.xs, textAlign: 'center' }}>
+                {(() => {
+                  const plan = deriveAiPlanState(aiUsage)
+                  if (plan.kind === 'byok' || plan.kind === 'exempt') return 'Unlimited AI usage'
+                  return `AI usage: ${plan.used}/${plan.limit} this period`
+                })()}
+              </Text>
+            )}
+
+            <View style={styles.actionRow}>
+              {!!doc.fileUrl && (
+                <Pressable
+                  style={[styles.actionBtn, { backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder }]}
+                  onPress={downloadFile}
+                >
+                  <Download size={16} color={C.text} />
+                  <Text style={[styles.actionBtnText, { color: C.text }]}>Download</Text>
+                </Pressable>
+              )}
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: C.cardElevated, borderWidth: 1, borderColor: C.cardBorder }]}
+                onPress={() => router.push(`/(app)/chat?documentId=${doc.id}` as any)}
+              >
+                <MessageCircle size={16} color={C.text} />
+                <Text style={[styles.actionBtnText, { color: C.text }]}>Chat with AI</Text>
+              </Pressable>
+            </View>
           </View>
+
+          {/* AI Summary Block */}
+          {doc.isOwner && summaryPhase !== 'idle' && (
+            <Card style={{ marginTop: Spacing.sm, padding: Spacing.md, gap: Spacing.sm, borderColor: C.primary, borderWidth: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+                  <Sparkles size={18} color={C.primary} />
+                  <Text style={{ fontSize: FontSize.base, fontWeight: '700', color: C.text }}>AI Summary</Text>
+                </View>
+                {summaryPhase === 'done' && summaryRecord && (
+                  <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+                    <Pressable onPress={copySummary} hitSlop={8}>
+                      <Copy size={18} color={C.muted} />
+                    </Pressable>
+                    <Pressable onPress={() => setShowSummaryShare(true)} hitSlop={8}>
+                      <Users size={18} color={C.muted} />
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+
+              {summaryPhase === 'starting' || summaryPhase === 'polling' ? (
+                <Text style={{ color: C.muted, fontSize: FontSize.sm }}>
+                  Analyzing document content and generating summary...
+                </Text>
+              ) : summaryPhase === 'error' && summaryError?.details ? (
+                <Text style={{ color: C.error, fontSize: FontSize.sm }}>
+                  You've reached your AI usage limit for this period
+                  {typeof summaryError.details.resetAt === 'string'
+                    ? ` (resets ${formatDate(summaryError.details.resetAt as string)})`
+                    : ''}
+                  .
+                </Text>
+              ) : summaryPhase === 'error' && summaryError ? (
+                <Text style={{ color: C.error, fontSize: FontSize.sm }}>{summaryError.message}</Text>
+              ) : summaryPhase === 'done' && summaryRecord?.content && 'markdown' in summaryRecord.content ? (
+                <SummaryMarkdown markdown={summaryRecord.content.markdown} />
+              ) : null}
+            </Card>
+          )}
         </ScrollView>
 
         <Modal
@@ -749,6 +1042,8 @@ export default function DocumentDetailsPage() {
                   style={[styles.input, { backgroundColor: C.cardElevated, borderColor: C.cardBorder, color: C.text }]}
                 />
 
+                {canManage ? (
+                <>
                 <Text style={[styles.label, { color: C.textSecondary }]}>Subject</Text>
                 <Pressable
                   onPress={() => setShowSubjectPicker(true)}
@@ -779,6 +1074,8 @@ export default function DocumentDetailsPage() {
                   )}
                   <ChevronDown size={18} color={C.muted} />
                 </Pressable>
+                </>
+                ) : null}
 
                 <Text style={[styles.label, { color: C.textSecondary }]}>Description</Text>
                 <TextInput
@@ -878,6 +1175,24 @@ export default function DocumentDetailsPage() {
             </Pressable>
           </Pressable>
         </Modal>
+        <DocumentShareSheet
+          document={doc}
+          onClose={() => setShowShare(false)}
+          visible={showShare}
+        />
+        <SharedDocumentSubjectSheet
+          document={doc}
+          subjects={subjects}
+          onClose={() => setShowSharedSubject(false)}
+          onUpdated={setDoc}
+          visible={showSharedSubject}
+        />
+        <SummaryShareSheet
+          artifactId={summaryRecord?._id ?? null}
+          onClose={() => setShowSummaryShare(false)}
+          title={doc.title}
+          visible={showSummaryShare}
+        />
       </SafeAreaView>
   )
 }

@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Eye, EyeOff, Lock, Mail, User } from 'lucide-react-native'
 import Button from '../../components/ui/Button'
@@ -16,11 +16,16 @@ import Input from '../../components/ui/Input'
 import BrandLogo from '../../components/ui/BrandLogo'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
+import { useAuth } from '../../hooks/useAuth'
 import { register } from '../../services/authApi'
 
 export default function RegisterPage() {
   const C = useColors()
-  const [form, setForm] = useState({ fullName: '', email: '', password: '', confirm: '' })
+  const { signIn } = useAuth()
+  const params = useLocalSearchParams<{ email?: string; invite?: string }>()
+  const invitedEmail = typeof params.email === 'string' ? params.email.trim() : ''
+  const inviteToken = typeof params.invite === 'string' ? params.invite.trim() : ''
+  const [form, setForm] = useState({ fullName: '', email: invitedEmail, password: '', confirm: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -41,8 +46,18 @@ export default function RegisterPage() {
     setError('')
     setLoading(true)
     try {
-      await register({ fullName: form.fullName, email: form.email, password: form.password })
-      router.replace('/(app)/dashboard')
+      const result = await register({
+        fullName: form.fullName,
+        email: form.email,
+        password: form.password,
+        inviteToken: inviteToken || undefined,
+      })
+      signIn(result.user)
+      router.replace(
+        result.redirectDocumentId
+          ? (`/(app)/document/${result.redirectDocumentId}` as any)
+          : '/(app)/dashboard',
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to create account.')
     } finally {
@@ -69,19 +84,14 @@ export default function RegisterPage() {
   logoIcon: {
     width: 44,
     height: 44,
-    borderRadius: 13,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
   },
   logoText: {
     fontSize: FontSize.lg,
-    fontWeight: '700',
+    fontWeight: '800',
     color: C.text,
     letterSpacing: 0.5,
   },
@@ -93,7 +103,7 @@ export default function RegisterPage() {
     fontSize: FontSize.xxl,
     fontWeight: '700',
     color: C.text,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   subtitle: {
     fontSize: FontSize.sm,
@@ -102,15 +112,10 @@ export default function RegisterPage() {
   },
   card: {
     backgroundColor: C.cardElevated,
-    borderRadius: 22,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: C.cardBorder,
     padding: Spacing.lg,
-    shadowColor: C.cardShadowColor,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 8,
   },
   errorBox: {
     backgroundColor: C.errorDim,
@@ -177,7 +182,8 @@ export default function RegisterPage() {
                 value={form.fullName}
                 onChangeText={(v) => setForm((f) => ({ ...f, fullName: v }))}
                 leftIcon={<User size={18} color={C.muted} />}
-                editable={!loading}
+                editable={!loading && !invitedEmail}
+                hint={invitedEmail ? 'Use the email address that received this invitation.' : undefined}
               />
 
               <Input
@@ -232,7 +238,14 @@ export default function RegisterPage() {
 
             <View style={styles.footer}>
               <Text style={styles.footerText}>Already have an account? </Text>
-              <Pressable onPress={() => router.push('/(auth)/login')}>
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: '/(auth)/login',
+                    params: invitedEmail ? { email: invitedEmail } : undefined,
+                  })
+                }
+              >
                 <Text style={styles.footerLink}>Sign in</Text>
               </Pressable>
             </View>

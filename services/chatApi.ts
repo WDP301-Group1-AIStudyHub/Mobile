@@ -94,6 +94,8 @@ export interface ChatThreadItem {
   documentId?: string
   documentIds?: string[]
   mode?: string
+  sourceStatus?: 'ACTIVE' | 'DELETED'
+  sourceDeletedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -113,6 +115,8 @@ export interface ChatThreadMessage {
   subjectId?: string
   scope: string
   mode: string
+  sourceStatus?: 'ACTIVE' | 'DELETED'
+  sourceDeletedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -141,6 +145,26 @@ export async function getChatThreadById(threadId: string): Promise<ChatThreadDet
   } catch (error) {
     return handleAxiosError(error)
   }
+}
+
+export async function updateChatThread(threadId: string, payload: { title?: string; status?: 'ACTIVE' | 'ARCHIVED' }): Promise<ChatThreadItem> {
+  try {
+    const { data } = await apiClient.patch<ApiResponse<ChatThreadItem>>(`/api/chat/threads/${threadId}`, payload)
+    if (!data.data) throw new ChatApiError('Chat thread not found', 404)
+    return data.data
+  } catch (error) { return handleAxiosError(error) }
+}
+
+export interface EvaluationLog { id: string; question: string; retrievalMode?: string; mode?: string; retrievedChunksCount?: number; relevantChunksCount?: number; averageRelevanceScore?: number; isGrounded?: boolean; confidenceScore?: number; responseTimeMs?: number; createdAt: string }
+export interface EvaluationSummary { totalQuestions: number; averageRelevanceScore: number; averageConfidenceScore: number; averageResponseTime: number; drRagModeCount: number }
+export async function getEvaluationLogs(): Promise<EvaluationLog[]> {
+  const { data } = await apiClient.get<ApiResponse<EvaluationLog[]>>('/api/evaluation/logs')
+  return data.data || []
+}
+export async function getEvaluationSummary(): Promise<EvaluationSummary> {
+  const { data } = await apiClient.get<ApiResponse<EvaluationSummary>>('/api/evaluation/summary')
+  if (!data.data) throw new ChatApiError('Empty evaluation summary', 500)
+  return data.data
 }
 
 export async function deleteChatThread(threadId: string): Promise<void> {

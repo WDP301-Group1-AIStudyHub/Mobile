@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Check,
   X,
+  CircleAlert,
 } from 'lucide-react-native'
 import { useColors } from '../../../contexts/ThemeContext'
 import { FontSize, Spacing, Radius } from '../../../constants/colors'
@@ -31,7 +32,6 @@ import {
   IFlashcardItem,
   IMcqItem,
 } from '../../../services/studyMaterialApi'
-import ThemeToggle from '../../../components/ui/ThemeToggle'
 
 export default function StudyMaterialDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -92,6 +92,10 @@ export default function StudyMaterialDetail() {
 
   const handleExplain = async () => {
     if (!id || !material) return
+    if (material.sourceStatus === 'DELETED') {
+      Alert.alert('Source document deleted', 'This study set remains available, but new AI explanations cannot be generated.')
+      return
+    }
     setExplaining(true)
     setShowExplanation(true)
     setExplanation(null)
@@ -141,7 +145,6 @@ export default function StudyMaterialDetail() {
             <Pressable style={[styles.backBtn, { backgroundColor: C.card, borderColor: C.cardBorder }]} onPress={() => router.back()}>
               <ArrowLeft size={18} color={C.textSecondary} />
             </Pressable>
-            <ThemeToggle size={38} />
           </View>
           <View style={styles.centerWrap}>
             <ActivityIndicator size="large" color={C.primary} />
@@ -161,7 +164,6 @@ export default function StudyMaterialDetail() {
             <Pressable style={[styles.backBtn, { backgroundColor: C.card, borderColor: C.cardBorder }]} onPress={() => router.back()}>
               <ArrowLeft size={18} color={C.textSecondary} />
             </Pressable>
-            <ThemeToggle size={38} />
           </View>
           <View style={styles.centerWrap}>
             <X size={36} color={C.error} />
@@ -182,7 +184,6 @@ export default function StudyMaterialDetail() {
             <Pressable style={[styles.backBtn, { backgroundColor: C.card, borderColor: C.cardBorder }]} onPress={() => router.back()}>
               <ArrowLeft size={18} color={C.textSecondary} />
             </Pressable>
-            <ThemeToggle size={38} />
           </View>
           <View style={styles.centerWrap}>
             <RotateCcw size={44} color={C.primary} style={{ transform: [{ rotate: '45deg' }] }} />
@@ -204,7 +205,6 @@ export default function StudyMaterialDetail() {
             <Pressable style={[styles.backBtn, { backgroundColor: C.card, borderColor: C.cardBorder }]} onPress={() => router.back()}>
               <ArrowLeft size={18} color={C.textSecondary} />
             </Pressable>
-            <ThemeToggle size={38} />
           </View>
           <View style={styles.centerWrap}>
             <X size={36} color={C.error} />
@@ -233,8 +233,14 @@ export default function StudyMaterialDetail() {
               {material.title}
             </Text>
           </View>
-          <ThemeToggle size={38} />
         </View>
+
+        {material.sourceStatus === 'DELETED' ? (
+          <View style={[styles.sourceDeletedBanner, { backgroundColor: C.cardElevated, borderColor: C.cardBorder }]}>
+            <CircleAlert size={16} color={C.muted} />
+            <Text style={[styles.sourceDeletedText, { color: C.muted }]}>Source document deleted. Existing cards and quiz content remain available.</Text>
+          </View>
+        ) : null}
 
         {material.type === 'FLASHCARD' ? (
           // --- FLASHCARDS DISPLAY ---
@@ -290,7 +296,11 @@ export default function StudyMaterialDetail() {
                 <ChevronLeft size={20} color={C.text} />
               </Pressable>
 
-              <Pressable style={[styles.explainBtn, { backgroundColor: C.primary }]} onPress={handleExplain}>
+              <Pressable
+                disabled={material.sourceStatus === 'DELETED'}
+                style={[styles.explainBtn, { backgroundColor: C.primary }, material.sourceStatus === 'DELETED' && { opacity: 0.45 }]}
+                onPress={handleExplain}
+              >
                 <Sparkles size={16} color="#fff" />
                 <Text style={styles.explainBtnText}>AI Explain</Text>
               </Pressable>
@@ -580,6 +590,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   explainBtnText: { color: '#fff', fontSize: FontSize.sm, fontWeight: '700' },
+  sourceDeletedBanner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, borderWidth: 1, borderRadius: Radius.md, padding: Spacing.sm },
+  sourceDeletedText: { flex: 1, fontSize: FontSize.xs, lineHeight: 18 },
 
   // MCQ styles
   mcqCard: {

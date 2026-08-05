@@ -11,7 +11,7 @@ import {
   RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import {
   Brain,
   Trash2,
@@ -25,7 +25,6 @@ import {
 } from 'lucide-react-native'
 import { useColors } from '../../contexts/ThemeContext'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
-import ThemeToggle from '../../components/ui/ThemeToggle'
 import Input from '../../components/ui/Input'
 import {
   getAllStudyMaterials,
@@ -37,6 +36,7 @@ import {
 import { listDocuments } from '../../services/documentApi'
 import { listSubjects } from '../../services/subjectApi'
 import type { DocumentItem } from '../../types/document'
+import { normalizeAccessibleDocuments } from '../../utils/accessibleDocuments'
 import type { SubjectItem } from '../../types/subject'
 
 export default function StudyMaterialsPage() {
@@ -80,9 +80,11 @@ export default function StudyMaterialsPage() {
     }
   }, [])
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  useFocusEffect(
+    useCallback(() => {
+      loadData()
+    }, [loadData]),
+  )
 
   // Polling to update progress of generating items
   useEffect(() => {
@@ -105,7 +107,7 @@ export default function StudyMaterialsPage() {
         listDocuments(),
         listSubjects().catch(() => [] as SubjectItem[]),
       ])
-      setDocs(Array.isArray(docsRes) ? docsRes : [])
+      setDocs(normalizeAccessibleDocuments(docsRes))
       setSubjects(Array.isArray(subsRes) ? subsRes : [])
     } catch (err) {
       console.error('[study-materials] form load error', err)
@@ -235,7 +237,6 @@ export default function StudyMaterialsPage() {
             </View>
           </View>
           <View style={styles.headerActions}>
-            <ThemeToggle size={38} />
             <Pressable
               onPress={openCreateModal}
               style={({ pressed }) => [
@@ -308,6 +309,11 @@ export default function StudyMaterialsPage() {
                           {new Date(m.createdAt).toLocaleDateString()}
                         </Text>
                         {renderStatus(m.status, m.error)}
+                        {m.sourceStatus === 'DELETED' ? (
+                          <View style={[styles.typeBadge, { backgroundColor: C.cardElevated }]}>
+                            <Text style={[styles.typeText, { color: C.muted }]}>SOURCE DELETED</Text>
+                          </View>
+                        ) : null}
                       </View>
                     </View>
                     <View style={styles.actions}>
@@ -388,7 +394,7 @@ export default function StudyMaterialsPage() {
                           </Pressable>
                           {subjects.map((sub) => (
                             <Pressable
-                              key={sub.id}
+                              key={sub.id || sub._id || sub.name}
                               style={[styles.pickerItem, { borderBottomColor: C.cardBorder }]}
                               onPress={() => {
                                 setSelectedSubjectId(sub.id)
@@ -436,7 +442,12 @@ export default function StudyMaterialsPage() {
                                   setShowDocPicker(false)
                                 }}
                               >
-                                <Text style={[styles.pickerItemText, { color: C.text }]}>{doc.title}</Text>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={[styles.pickerItemText, { color: C.text }]}>{doc.title}</Text>
+                                  <Text style={{ fontSize: 10, color: C.muted, paddingTop: 2 }}>
+                                    {doc.isShared ? `${doc.accessRole === 'EDITOR' ? 'Editor' : 'Viewer'} · Shared` : 'Owner'}
+                                  </Text>
+                                </View>
                               </Pressable>
                             ))
                           )}
@@ -578,7 +589,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
   },
-  title: { fontSize: FontSize.xl, fontWeight: '800', letterSpacing: -0.5 },
+  title: { fontSize: FontSize.xl, fontWeight: '800', letterSpacing: 0 },
   subtitle: { fontSize: FontSize.xs, fontWeight: '500' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   addBtn: {

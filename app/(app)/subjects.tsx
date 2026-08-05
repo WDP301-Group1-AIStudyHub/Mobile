@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -12,11 +12,13 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { BookOpen, Edit2, Plus, Trash2, X, FolderOpen } from 'lucide-react-native'
+import { BookOpen, Edit2, Plus, Trash2, X, FolderOpen, Search } from 'lucide-react-native'
+import { router, useLocalSearchParams } from 'expo-router'
 import Card from '../../components/ui/Card'
-import ThemeToggle from '../../components/ui/ThemeToggle'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
+import Input from '../../components/ui/Input'
+import { matchesQuery } from '../../utils/searchUtils'
 import {
   createSubject,
   deleteSubject,
@@ -28,6 +30,7 @@ import type { SubjectItem } from '../../types/subject'
 type FormState = {
   name: string
   code: string
+  semester: string
   description: string
   color: string
 }
@@ -46,6 +49,7 @@ const COLOR_OPTIONS = [
 const EMPTY_FORM: FormState = {
   name: '',
   code: '',
+  semester: '',
   description: '',
   color: COLOR_OPTIONS[0],
 }
@@ -59,9 +63,33 @@ const getSafeId = (item: any): string => {
 
 export default function SubjectsPage() {
   const C = useColors()
+  const { create } = useLocalSearchParams<{ create?: string }>()
+  const openedFromHub = create === '1'
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+
+  const [search, setSearch] = useState('')
+  const [semesterFilter, setSemesterFilter] = useState('ALL')
+
+  const semesters = useMemo(() => {
+    const s = new Set<string>()
+    subjects.forEach((sub) => {
+      if (sub.semester) s.add(sub.semester)
+    })
+    return Array.from(s).sort()
+  }, [subjects])
+
+  const filteredSubjects = useMemo(() => {
+    let res = subjects
+    if (search.trim()) {
+      res = res.filter(s => matchesQuery(s.name, search) || matchesQuery(s.code || '', search))
+    }
+    if (semesterFilter !== 'ALL') {
+      res = res.filter(s => s.semester === semesterFilter)
+    }
+    return res
+  }, [subjects, search, semesterFilter])
 
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -84,17 +112,22 @@ export default function SubjectsPage() {
     load()
   }, [load])
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setShowModal(true)
-  }
+  }, [])
+
+  useEffect(() => {
+    if (openedFromHub) openCreate()
+  }, [openedFromHub, openCreate])
 
   const openEdit = (s: SubjectItem) => {
     setEditingId(getSafeId(s))
     setForm({
       name: s.name,
       code: s.code ?? '',
+      semester: s.semester ?? '',
       description: s.description ?? '',
       color: s.color ?? COLOR_OPTIONS[0],
     })
@@ -106,6 +139,7 @@ export default function SubjectsPage() {
     setShowModal(false)
     setEditingId(null)
     setForm(EMPTY_FORM)
+    if (openedFromHub) router.replace('/(app)/documents')
   }
 
   const handleSave = async () => {
@@ -119,6 +153,7 @@ export default function SubjectsPage() {
       const payload = {
         name,
         code: form.code.trim() || undefined,
+        semester: form.semester.trim() || undefined,
         description: form.description.trim() || undefined,
         color: form.color,
       }
@@ -132,6 +167,7 @@ export default function SubjectsPage() {
       setShowModal(false)
       setEditingId(null)
       setForm(EMPTY_FORM)
+      if (openedFromHub) router.replace('/(app)/documents')
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Could not save subject.'
       Alert.alert('Error', msg)
@@ -181,7 +217,6 @@ export default function SubjectsPage() {
               </View>
             </View>
             <View style={styles.headerActions}>
-              <ThemeToggle />
               <Pressable
                 onPress={openCreate}
                 style={({ pressed }) => [
@@ -195,6 +230,39 @@ export default function SubjectsPage() {
               </Pressable>
             </View>
           </View>
+
+          <View style={styles.searchRow}>
+            <Input
+              placeholder="Search subjects"
+              value={search}
+              onChangeText={setSearch}
+              leftIcon={<Search size={16} color={C.muted} />}
+              containerStyle={[styles.searchInput, { backgroundColor: C.cardElevated, borderColor: C.cardBorder }]}
+              style={[styles.compactInput, { color: C.text }]}
+              placeholderTextColor={C.muted}
+            />
+          </View>
+          {semesters.length > 0 ? (
+            <View style={{ marginBottom: Spacing.md }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: Spacing.sm }}>
+                <Pressable
+                  onPress={() => setSemesterFilter('ALL')}
+                  style={[styles.filterChip, { borderColor: C.cardBorder, backgroundColor: semesterFilter === 'ALL' ? C.primary : C.cardElevated }]}
+                >
+                  <Text style={[styles.filterChipText, semesterFilter === 'ALL' ? { color: '#fff' } : { color: C.textSecondary }]}>All Semesters</Text>
+                </Pressable>
+                {semesters.map((sem) => (
+                  <Pressable
+                    key={sem}
+                    onPress={() => setSemesterFilter(sem)}
+                    style={[styles.filterChip, { borderColor: C.cardBorder, backgroundColor: semesterFilter === sem ? C.primary : C.cardElevated }]}
+                  >
+                    <Text style={[styles.filterChipText, semesterFilter === sem ? { color: '#fff' } : { color: C.textSecondary }]}>{sem}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
 
           <ScrollView
             contentContainerStyle={styles.listContent}
@@ -232,14 +300,32 @@ export default function SubjectsPage() {
                   Tap "New" to create your first subject.
                 </Text>
               </View>
+            ) : filteredSubjects.length === 0 ? (
+              <View style={styles.empty}>
+                <View
+                  style={[
+                    styles.emptyIcon,
+                    { backgroundColor: C.primaryDim, borderColor: C.cardBorder },
+                  ]}
+                >
+                  <Search size={36} color={C.muted} />
+                </View>
+                <Text style={[styles.emptyText, { color: C.textSecondary }]}>
+                  No results found
+                </Text>
+                <Text style={[styles.emptyDesc, { color: C.muted }]}>
+                  Try adjusting your search or filter.
+                </Text>
+              </View>
             ) : (
-              subjects.map((item, index) => {
+              filteredSubjects.map((item, index) => {
                 // Truyền key an toàn, fallback về index nếu data thực sự bị lỗi mất ID
                 const safeKey = getSafeId(item) || `fallback-key-${index}`;
                 return (
                   <SubjectRow
                     key={safeKey}
                     item={item}
+                    onOpen={(subject) => router.push(`/(app)/subject/${getSafeId(subject)}` as any)}
                     onEdit={openEdit}
                     onDelete={handleDelete}
                   />
@@ -300,6 +386,22 @@ export default function SubjectsPage() {
                 placeholder="e.g. MATH101"
                 placeholderTextColor={C.muted}
                 autoCapitalize="characters"
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: C.cardElevated,
+                    borderColor: C.cardBorder,
+                    color: C.text,
+                  },
+                ]}
+              />
+
+              <Text style={[styles.label, { color: C.textSecondary }]}>Semester</Text>
+              <TextInput
+                value={form.semester}
+                onChangeText={(v) => setForm((f) => ({ ...f, semester: v }))}
+                placeholder="e.g. Fall 2026"
+                placeholderTextColor={C.muted}
                 style={[
                   styles.input,
                   {
@@ -377,24 +479,30 @@ function SubjectRow({
   item,
   onEdit,
   onDelete,
+  onOpen,
 }: {
   item: SubjectItem
   onEdit: (s: SubjectItem) => void
   onDelete: (s: SubjectItem) => void
+  onOpen: (s: SubjectItem) => void
 }) {
   const C = useColors()
+  const canManage = item.currentUserRole === 'OWNER' || item.currentUserRole === 'ADMIN'
   return (
     <Card>
       <View style={styles.row}>
         <View
           style={[styles.colorChip, { backgroundColor: item.color ?? C.primary }]}
         />
-        <View style={styles.rowInfo}>
+        <Pressable style={styles.rowInfo} onPress={() => onOpen(item)}>
           <Text style={[styles.rowName, { color: C.text }]} numberOfLines={1}>
             {item.name}
           </Text>
           {item.code ? (
-            <Text style={[styles.rowCode, { color: C.primary }]}>{item.code}</Text>
+            <Text style={[styles.rowCode, { color: C.primary }]}>Code: {item.code}</Text>
+          ) : null}
+          {item.semester ? (
+            <Text style={[styles.rowSemester, { color: C.primary }]}>Semester: {item.semester}</Text>
           ) : null}
           {item.description ? (
             <Text
@@ -404,8 +512,15 @@ function SubjectRow({
               {item.description}
             </Text>
           ) : null}
-        </View>
-        <View style={styles.rowActions}>
+          <View style={styles.workspaceMeta}>
+            <Text style={[styles.roleBadge, { backgroundColor: C.primaryDim, color: C.primary }]}>{item.currentUserRole || 'NO ACCESS'}</Text>
+            <Text style={[styles.countMeta, { color: C.textSecondary }]}>{item.documentCount ?? 0} docs</Text>
+            <Text style={[styles.countMeta, { color: C.textSecondary }]}>{item.memberCount ?? 0} members</Text>
+            <Text style={[styles.countMeta, { color: C.textSecondary }]}>{item.teamCount ?? 0} teams</Text>
+          </View>
+          {item.updatedAt ? <Text style={[styles.updatedMeta, { color: C.muted }]}>Updated {new Date(item.updatedAt).toLocaleDateString()}</Text> : null}
+        </Pressable>
+        {canManage ? <View style={styles.rowActions}>
           <Pressable
             onPress={() => onEdit(item)}
             hitSlop={8}
@@ -420,7 +535,7 @@ function SubjectRow({
           >
             <Trash2 size={16} color={C.error} />
           </Pressable>
-        </View>
+        </View> : null}
       </View>
     </Card>
   )
@@ -447,7 +562,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: FontSize.xl,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   subtitle: { fontSize: FontSize.xs, fontWeight: '500', marginTop: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
@@ -470,19 +585,49 @@ const styles = StyleSheet.create({
   emptyIcon: {
     width: 72,
     height: 72,
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
   },
   emptyText: { fontSize: FontSize.md, fontWeight: '700' },
-  emptyDesc: { fontSize: FontSize.sm, textAlign: 'center' },
+  emptyDesc: {
+    fontSize: FontSize.sm,
+    textAlign: 'center',
+  },
+  searchRow: {
+    marginBottom: Spacing.md,
+  },
+  searchInput: {
+    height: 48,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+  },
+  compactInput: {
+    fontSize: FontSize.sm,
+    marginLeft: Spacing.xs,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   colorChip: { width: 6, height: 44, borderRadius: 3 },
   rowInfo: { flex: 1 },
   rowName: { fontSize: FontSize.base, fontWeight: '700' },
   rowCode: { fontSize: FontSize.xs, fontWeight: '600', marginTop: 2 },
+  rowSemester: { fontSize: FontSize.xs, fontWeight: '500', marginTop: 2 },
   rowDesc: { fontSize: FontSize.xs, marginTop: 4 },
+  workspaceMeta: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: Spacing.sm },
+  roleBadge: { borderRadius: Radius.full, fontSize: FontSize.xs, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 4 },
+  countMeta: { fontSize: FontSize.xs, fontWeight: '600' },
+  updatedMeta: { fontSize: FontSize.xs, marginTop: 6 },
   rowActions: { flexDirection: 'row', gap: 4 },
   iconBtn: { padding: 8, borderRadius: Radius.sm },
   pressed: { opacity: 0.6 },

@@ -6,9 +6,9 @@
     "scheme": "aistudyhub",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "splash": {
-      "backgroundColor": "#050816"
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": false,
@@ -16,7 +16,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#050816"
+        "backgroundColor": "#ffffff"
       },
       "package": "com.aistudyhub.mobile",
       "softwareKeyboardLayoutMode": "pan"
@@ -29,7 +29,7 @@
       "expo-router",
       "expo-font",
       "expo-secure-store",
-      "expo-video"
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
