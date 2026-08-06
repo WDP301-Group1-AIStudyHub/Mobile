@@ -61,10 +61,14 @@ export async function forgotPassword(payload: ForgotPasswordPayload): Promise<vo
 
 export async function resetPassword(payload: {
   token: string
+  email?: string
   password: string
 }): Promise<void> {
-  // TODO: BE chưa có endpoint /api/auth/reset-password — stub để tránh lỗi runtime
-  console.warn('[authApi] resetPassword: endpoint not implemented on server yet', payload)
+  try {
+    await apiClient.post('/api/auth/reset-password', payload)
+  } catch (error) {
+    return handleAxiosError(error)
+  }
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {
@@ -94,8 +98,11 @@ export async function changePassword(payload: {
   currentPassword: string
   newPassword: string
 }): Promise<void> {
-  // TODO: BE chưa có endpoint /api/auth/change-password — stub để tránh lỗi runtime
-  console.warn('[authApi] changePassword: endpoint not implemented on server yet', payload)
+  try {
+    await apiClient.post('/api/auth/change-password', payload)
+  } catch (error) {
+    return handleAxiosError(error)
+  }
 }
 
 export async function logout(): Promise<void> {
