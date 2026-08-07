@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -10,7 +11,8 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
-import { ArrowLeft, RefreshCw, Sparkles, Users } from 'lucide-react-native'
+import * as Clipboard from 'expo-clipboard'
+import { ArrowLeft, Check, Copy, ExternalLink, RefreshCw, Sparkles, Users, X } from 'lucide-react-native'
 
 import Card from '../../components/ui/Card'
 import SummaryMarkdown from '../../components/artifacts/SummaryMarkdown'
@@ -37,6 +39,8 @@ export default function SharedSummariesScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [readerVisible, setReaderVisible] = useState(false)
+  const [copied, setCopied] = useState(false)
   const isMountedRef = useRef(true)
   const pollTimers = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map())
 
@@ -110,7 +114,34 @@ export default function SharedSummariesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries.length])
 
-  const selected = entries.find((entry) => entry.artifact._id === selectedId)
+  const readerEntry = entries.find((entry) => entry.artifact._id === selectedId) ?? null
+
+  // A completed entry can vanish from underneath an open reader on refresh —
+  // close rather than show a modal pointing at nothing.
+  useEffect(() => {
+    if (readerVisible && !readerEntry) setReaderVisible(false)
+  }, [readerVisible, readerEntry])
+
+  const openReader = (artifactId: string) => {
+    setSelectedId(artifactId)
+    setReaderVisible(true)
+    setCopied(false)
+  }
+
+  const copyMarkdown = async () => {
+    const content = readerEntry?.artifact.content
+    if (!content || !('markdown' in content)) return
+    await Clipboard.setStringAsync(content.markdown)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const openSourceDocument = () => {
+    const documentId = readerEntry?.artifact.summaryDocumentId
+    if (!documentId) return
+    setReaderVisible(false)
+    router.push(`/(app)/document/viewer/${documentId}` as any)
+  }
 
   const styles = StyleSheet.create({
     safe: { flex: 1, backgroundColor: C.background },
@@ -146,6 +177,31 @@ export default function SharedSummariesScreen() {
       backgroundColor: C.infoDim,
     },
     statusText: { fontSize: FontSize.xs, color: C.info, fontWeight: '600' },
+    failedText: { color: C.error, fontSize: FontSize.sm, marginTop: Spacing.sm },
+    readerSafe: { flex: 1, backgroundColor: C.background },
+    readerHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: Spacing.md,
+      padding: Spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: C.cardBorder,
+    },
+    readerHeaderText: { flex: 1, gap: 2 },
+    readerTitle: { fontSize: FontSize.lg, fontWeight: '700', color: C.text },
+    readerMeta: { fontSize: FontSize.xs, color: C.muted },
+    readerActions: { flexDirection: 'row', gap: Spacing.sm },
+    readerIconBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: Radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: C.cardElevated,
+      borderWidth: 1,
+      borderColor: C.cardBorder,
+    },
+    readerBody: { padding: Spacing.lg },
   })
 
   return (
@@ -160,7 +216,7 @@ export default function SharedSummariesScreen() {
           </Pressable>
           <View>
             <Text style={styles.title}>Shared with me</Text>
-            <Text style={styles.subtitle}>AI summaries other people have shared with you</Text>
+            <Text style={styles.subtitle}>AI summaries other people have shared with you — opening one also gives you the source document</Text>
           </View>
         </View>
 
@@ -174,12 +230,12 @@ export default function SharedSummariesScreen() {
         ) : (
           entries.map((entry) => {
             const { artifact, sharedBy, sharedAt } = entry
-            const isOpen = selectedId === artifact._id
             return (
               <Card key={artifact._id} style={styles.entryCard}>
                 <Pressable
-                  onPress={() => setSelectedId(isOpen ? null : artifact._id)}
+                  onPress={() => artifact.status === 'COMPLETED' && openReader(artifact._id)}
                   style={styles.entryTitleRow}
+                  disabled={artifact.status !== 'COMPLETED'}
                 >
                   <Sparkles size={16} color={C.primary} />
                   <Text numberOfLines={1} style={styles.entryTitle}>{artifact.title}</Text>
@@ -197,13 +253,8 @@ export default function SharedSummariesScreen() {
                   </View>
                 ) : null}
 
-                {isOpen && artifact.status === 'COMPLETED' && artifact.content && 'markdown' in artifact.content ? (
-                  <View style={{ marginTop: Spacing.sm }}>
-                    <SummaryMarkdown markdown={artifact.content.markdown} />
-                  </View>
-                ) : null}
-                {isOpen && artifact.status === 'FAILED' ? (
-                  <Text style={{ color: C.error, fontSize: FontSize.sm, marginTop: Spacing.sm }}>
+                {artifact.status === 'FAILED' ? (
+                  <Text style={styles.failedText}>
                     This summary failed to generate. Ask the owner to retry it.
                   </Text>
                 ) : null}
@@ -212,6 +263,44 @@ export default function SharedSummariesScreen() {
           })
         )}
       </ScrollView>
+
+      <Modal
+        animationType="slide"
+        visible={readerVisible}
+        onRequestClose={() => setReaderVisible(false)}
+      >
+        <SafeAreaView style={styles.readerSafe}>
+          <View style={styles.readerHeader}>
+            <View style={styles.readerHeaderText}>
+              <Text numberOfLines={2} style={styles.readerTitle}>
+                {readerEntry?.artifact.title}
+              </Text>
+              <Text style={styles.readerMeta}>
+                Shared by {readerEntry?.sharedBy?.fullName ?? readerEntry?.sharedBy?.email ?? 'someone'}
+                {readerEntry ? ` · ${formatDateTime(readerEntry.sharedAt)}` : ''}
+              </Text>
+            </View>
+            <View style={styles.readerActions}>
+              {readerEntry?.artifact.summaryDocumentId ? (
+                <Pressable style={styles.readerIconBtn} onPress={openSourceDocument} hitSlop={8}>
+                  <ExternalLink size={17} color={C.text} />
+                </Pressable>
+              ) : null}
+              <Pressable style={styles.readerIconBtn} onPress={copyMarkdown} hitSlop={8}>
+                {copied ? <Check size={17} color={C.success} /> : <Copy size={17} color={C.text} />}
+              </Pressable>
+              <Pressable style={styles.readerIconBtn} onPress={() => setReaderVisible(false)} hitSlop={8}>
+                <X size={17} color={C.text} />
+              </Pressable>
+            </View>
+          </View>
+          <ScrollView contentContainerStyle={styles.readerBody}>
+            {readerEntry?.artifact.content && 'markdown' in readerEntry.artifact.content ? (
+              <SummaryMarkdown markdown={readerEntry.artifact.content.markdown} />
+            ) : null}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   )
 }

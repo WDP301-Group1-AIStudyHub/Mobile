@@ -77,6 +77,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024
 
 type LibraryView = 'mine' | 'shared' | 'starred' | 'trash'
 type DocumentSort = 'UPDATED_DESC' | 'NAME_ASC' | 'SIZE_DESC'
+type GroupMode = 'subject' | 'semester' | 'flat'
 
 // Helper function: Lấy ID an toàn tương thích với Mongoose (_id)
 const getSafeId = (item: any): string => {
@@ -113,6 +114,7 @@ export default function DocumentsPage() {
   const currentUser = state.status === 'authenticated' ? state.user : null
   const [docs, setDocs] = useState<DocumentItem[]>([])
   const [libraryView, setLibraryView] = useState<LibraryView>('mine')
+  const [groupMode, setGroupMode] = useState<GroupMode>('subject')
   const [sharingDocument, setSharingDocument] = useState<DocumentItem | null>(null)
   const [classifyingDocument, setClassifyingDocument] = useState<DocumentItem | null>(null)
   const [subjects, setSubjects] = useState<SubjectItem[]>([])
@@ -242,6 +244,53 @@ export default function DocumentsPage() {
         docs: uncategorized,
       })
     }
+    return result
+  }, [filteredDocs, subjects])
+
+  const semesterGroups = useMemo(() => {
+    // A doc's `subject` field can be a populated object (carries `.semester`
+    // directly) or a bare id/name string, in which case we resolve the
+    // semester via the loaded `subjects` list — same fallback the `groups`
+    // memo above uses for subject-name resolution.
+    const resolveSemester = (d: DocumentItem): string => {
+      if (d.subject && typeof d.subject === 'object' && d.subject.semester) {
+        return d.subject.semester
+      }
+      const docSubjectId = d.subjectId || (d as any).subject_id
+      if (docSubjectId) {
+        const found = subjects.find((s) => getSafeId(s) === docSubjectId)
+        if (found?.semester) return found.semester
+      }
+      const docSubjectName = getSubjectName(d.subject, '')
+      if (docSubjectName) {
+        const found = subjects.find((s) => s.name === docSubjectName)
+        if (found?.semester) return found.semester
+      }
+      return ''
+    }
+
+    const bySemester: Record<string, DocumentItem[]> = {}
+    for (const d of filteredDocs) {
+      const key = resolveSemester(d) || '__unscheduled__'
+      if (!bySemester[key]) bySemester[key] = []
+      bySemester[key].push(d)
+    }
+
+    const result: { subject: SubjectItem; docs: DocumentItem[] }[] = Object.keys(bySemester)
+      .filter((key) => key !== '__unscheduled__')
+      .sort((a, b) => a.localeCompare(b))
+      .map((key) => ({
+        subject: { id: key, name: key, createdAt: '', updatedAt: '' },
+        docs: bySemester[key],
+      }))
+
+    if (bySemester.__unscheduled__?.length) {
+      result.unshift({
+        subject: { id: '__uncategorized__', name: 'Unscheduled', createdAt: '', updatedAt: '' },
+        docs: bySemester.__unscheduled__,
+      })
+    }
+
     return result
   }, [filteredDocs, subjects])
 
@@ -709,6 +758,30 @@ export default function DocumentsPage() {
             </View>
           ) : null}
 
+          {libraryView === 'mine' ? (
+            <View style={[styles.libraryTabs, { backgroundColor: C.cardElevated }]}>
+              {([
+                { value: 'subject' as const, label: 'Subject' },
+                { value: 'semester' as const, label: 'Semester' },
+                { value: 'flat' as const, label: 'List' },
+              ]).map((item) => {
+                const active = groupMode === item.value
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={item.value}
+                    onPress={() => setGroupMode(item.value)}
+                    style={[styles.libraryTab, active && { backgroundColor: C.primary }]}
+                  >
+                    <Text style={[styles.libraryTabText, { color: active ? '#fff' : C.muted }]}>
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                )
+              })}
+            </View>
+          ) : null}
+
           {libraryView === 'trash' && docs.length > 0 ? (
             <View style={styles.primaryActions}>
               <Pressable
@@ -808,7 +881,15 @@ export default function DocumentsPage() {
               <View style={styles.loadingWrap}>
                 <ActivityIndicator color={C.primary} />
               </View>
-            ) : (libraryView !== 'mine' ? visibleFlatDocs.length === 0 : groups.length === 0) ? (
+            ) : (
+                libraryView !== 'mine'
+                  ? visibleFlatDocs.length === 0
+                  : groupMode === 'flat'
+                    ? visibleFlatDocs.length === 0
+                    : groupMode === 'semester'
+                      ? semesterGroups.length === 0
+                      : groups.length === 0
+              ) ? (
               <View style={styles.empty}>
                 <View
                   style={[
@@ -845,7 +926,7 @@ export default function DocumentsPage() {
                           : 'Tap the + button to upload your first document'}
                 </Text>
               </View>
-            ) : libraryView !== 'mine' ? (
+            ) : libraryView !== 'mine' || groupMode === 'flat' ? (
               visibleFlatDocs.map((document, index) => {
                 const documentId = getSafeId(document)
                 const accessLabel =
@@ -981,9 +1062,12 @@ export default function DocumentsPage() {
                 )
               })
             ) : (
-              groups.map((g, index) => {
+              (groupMode === 'semester' ? semesterGroups : groups).map((g, index) => {
                 const isUncategorized = g.subject.id === '__uncategorized__'
-                const groupId = isUncategorized ? '__uncategorized__' : getSafeId(g.subject)
+                // Semester groups use a plain string key rather than a real
+                // subject id, so their header can never link to a subject
+                // workspace route — only subject-mode groups can.
+                const groupId = isUncategorized || groupMode === 'semester' ? g.subject.id : getSafeId(g.subject)
                 const safeGroupKey = groupId || `group-fallback-${index}`
                 const isOpen = !!expanded[groupId]
 
@@ -994,7 +1078,7 @@ export default function DocumentsPage() {
                         accessibilityLabel={isUncategorized ? 'Expand uncategorized documents' : `Open ${g.subject.name} workspace`}
                         style={styles.subjectHeaderLeft}
                         onPress={() => {
-                          if (isUncategorized) {
+                          if (isUncategorized || groupMode === 'semester') {
                             toggleExpand(groupId)
                             return
                           }
@@ -1039,7 +1123,7 @@ export default function DocumentsPage() {
                         </View>
                       </Pressable>
                       <View style={styles.subjectHeaderRight}>
-                        {!isUncategorized ? (
+                        {!isUncategorized && groupMode !== 'semester' ? (
                           <Pressable
                             accessibilityLabel={`Upload document to ${g.subject.name}`}
                             onPress={() => openUpload(g.subject)}
