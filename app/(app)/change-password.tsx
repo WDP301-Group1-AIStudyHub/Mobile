@@ -10,9 +10,7 @@ import {
 } from 'react-native'
 import { router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { LinearGradient } from 'expo-linear-gradient'
 import { ArrowLeft, Check, Eye, EyeOff, Lock } from 'lucide-react-native'
-import VideoBg from '../../components/ui/VideoBg'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import { FontSize, Spacing, Radius } from '../../constants/colors'
@@ -63,11 +61,11 @@ export default function ChangePasswordPage() {
 
 
   const styles = useMemo(() => StyleSheet.create({
-  safe: { flex: 1 },
+  safe: { flex: 1, backgroundColor: C.background },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing.xxl + 96,
     gap: Spacing.lg,
   },
   topBar: {
@@ -191,9 +189,8 @@ export default function ChangePasswordPage() {
 }), [C])
 
   return (
-    <VideoBg>
-      <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
@@ -213,14 +210,9 @@ export default function ChangePasswordPage() {
 
             {/* Icon */}
             <View style={styles.iconSection}>
-              <LinearGradient
-                colors={C.gradientPrimary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.iconWrap}
-              >
+              <View style={[styles.iconWrap, { backgroundColor: C.primary }]} >
                 <Lock size={28} color="#fff" />
-              </LinearGradient>
+              </View>
               <Text style={styles.iconSubtitle}>
                 Choose a strong password with at least 8 characters.
               </Text>
@@ -345,6 +337,5 @@ export default function ChangePasswordPage() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </VideoBg>
   )
 }

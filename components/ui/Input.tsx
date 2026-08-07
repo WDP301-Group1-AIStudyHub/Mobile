@@ -53,17 +53,10 @@ export default function Input({
       borderRadius: Radius.lg,
       height: 52,
       overflow: 'hidden',
-      shadowColor: C.cardShadowColor,
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.04,
-      shadowRadius: 4,
     },
     focused: {
       borderColor: C.primary,
       backgroundColor: C.cardElevated,
-      shadowColor: C.primary,
-      shadowOpacity: 0.12,
-      shadowRadius: 8,
     },
     errorBorder: { borderColor: C.error },
     input: {

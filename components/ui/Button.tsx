@@ -4,11 +4,11 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  View,
   type PressableProps,
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { FontSize, Radius, Spacing } from '../../constants/colors'
 import { useColors } from '../../contexts/ThemeContext'
 
@@ -50,31 +50,28 @@ export default function Button({
       <Pressable
         {...props}
         disabled={isDisabled}
-        style={[{ width: fullWidth ? '100%' : undefined, borderRadius: sizeStyles.radius, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' }, style]}
+        style={({ pressed }) => [
+          styles.base,
+          {
+            height: sizeStyles.height,
+            paddingHorizontal: sizeStyles.paddingHorizontal,
+            borderRadius: sizeStyles.radius,
+            backgroundColor: isDisabled ? C.muted : C.primary,
+            width: fullWidth ? '100%' : undefined,
+            opacity: pressed ? 0.85 : 1,
+          },
+          style,
+        ]}
       >
-        {({ pressed }) => (
-          <LinearGradient
-            colors={C.gradientPrimary}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[
-              styles.base,
-              { height: sizeStyles.height, paddingHorizontal: sizeStyles.paddingHorizontal, borderRadius: sizeStyles.radius },
-              pressed && styles.pressed,
-              isDisabled && styles.disabled,
-            ]}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                {leftIcon}
-                <Text style={[styles.text, { fontSize: sizeStyles.fontSize, marginLeft: leftIcon ? 8 : 0 }]}>
-                  {title}
-                </Text>
-              </>
-            )}
-          </LinearGradient>
+        {loading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <>
+            {leftIcon}
+            <Text style={[styles.text, { fontSize: sizeStyles.fontSize, marginLeft: leftIcon ? 8 : 0 }]}>
+              {title}
+            </Text>
+          </>
         )}
       </Pressable>
     )
@@ -134,11 +131,5 @@ const styles = StyleSheet.create({
   text: {
     fontWeight: '600',
     color: '#fff',
-  },
-  pressed: {
-    opacity: 0.85,
-  },
-  disabled: {
-    opacity: 0.5,
   },
 })

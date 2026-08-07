@@ -1,4 +1,4 @@
-export type AuthView = 'login' | 'register' | 'forgot-password' | 'reset-password'
+
 
 export interface ApiResponse<T> {
   success: boolean
@@ -23,6 +23,7 @@ export interface AuthUser {
 export interface AuthResponse {
   user: AuthUser
   accessToken: string
+  redirectDocumentId?: string
 }
 
 export interface LoginPayload {
@@ -35,6 +36,7 @@ export interface RegisterPayload {
   email: string
   password: string
   avatar?: string
+  inviteToken?: string
 }
 
 export interface ForgotPasswordPayload {

@@ -31,18 +31,10 @@ export default function Card({
       borderRadius: Radius.lg,
       borderWidth: 1,
       borderColor: C.cardBorder,
-      shadowColor: C.cardShadowColor,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      elevation: 2,
     },
     elevated: {
       backgroundColor: C.cardElevated,
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.1,
-      shadowRadius: 18,
-      elevation: 5,
+      borderColor: C.cardBorder,
     },
   }), [C])
   return (

@@ -11,7 +11,6 @@ import {
 import { router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowLeft, Mail } from 'lucide-react-native'
-import VideoBg from '../../components/ui/VideoBg'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import BrandLogo from '../../components/ui/BrandLogo'
@@ -74,19 +73,14 @@ export default function ForgotPasswordPage() {
   logoIcon: {
     width: 44,
     height: 44,
-    borderRadius: 13,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
   },
   logoText: {
     fontSize: FontSize.lg,
-    fontWeight: '700',
+    fontWeight: '800',
     color: C.text,
     letterSpacing: 0.5,
   },
@@ -98,7 +92,7 @@ export default function ForgotPasswordPage() {
     fontSize: FontSize.xxl,
     fontWeight: '700',
     color: C.text,
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   subtitle: {
     fontSize: FontSize.sm,
@@ -109,15 +103,10 @@ export default function ForgotPasswordPage() {
   },
   card: {
     backgroundColor: C.cardElevated,
-    borderRadius: 22,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: C.cardBorder,
     padding: Spacing.lg,
-    shadowColor: C.cardShadowColor,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 8,
   },
   errorBox: {
     backgroundColor: C.errorDim,
@@ -157,9 +146,8 @@ export default function ForgotPasswordPage() {
 }), [C])
 
   return (
-    <VideoBg>
-      <SafeAreaView style={styles.safe}>
-        <KeyboardAvoidingView
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
@@ -230,6 +218,5 @@ export default function ForgotPasswordPage() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </VideoBg>
   )
 }

@@ -1,145 +1,119 @@
-import { getStoredToken } from './authStorage'
 import type {
   DocumentItem,
   DocumentsResponse,
+  DocumentFilter,
+  DocumentShare,
+  DocumentSharePermission,
+  UpdateSharedDocumentProfilePayload,
   UpdateDocumentPayload,
   UploadDocumentPayload,
 } from '../types/document'
 import type { ApiResponse } from '../types/auth'
+import apiClient from './apiClient'
 
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/+$/, '') || 'http://localhost:3000'
-const USE_MOCK_AUTH = process.env.EXPO_PUBLIC_AUTH_MOCK === '1'
-
-let mockDocuments: DocumentsResponse = [
-  {
-    id: 'mock-doc-1',
-    title: 'Quantum Entanglement Patterns',
-    description: 'Review sample document',
-    subject: 'Physics',
-    fileUrl: '#',
-    filePublicId: 'mock/quantum-entanglement-patterns',
-    fileName: 'Quantum Entanglement Patterns.pdf',
-    fileType: 'application/pdf',
-    fileSize: 1840000,
-    uploadedBy: 'mock-review-user',
-    createdAt: new Date('2026-05-20T08:00:00.000Z').toISOString(),
-    updatedAt: new Date('2026-05-20T08:00:00.000Z').toISOString(),
-  },
-  {
-    id: 'mock-doc-2',
-    title: 'Neural Network Topologies',
-    description: 'Review sample document',
-    subject: 'AI Research',
-    fileUrl: '#',
-    filePublicId: 'mock/neural-network-topologies',
-    fileName: 'Neural Network Topologies.epub',
-    fileType: 'application/epub+zip',
-    fileSize: 932000,
-    uploadedBy: 'mock-review-user',
-    createdAt: new Date('2026-05-22T10:30:00.000Z').toISOString(),
-    updatedAt: new Date('2026-05-22T10:30:00.000Z').toISOString(),
-  },
-  {
-    id: 'mock-doc-3',
-    title: 'Global Economic Shifts 2025',
-    description: 'Review sample document',
-    subject: 'Economics',
-    fileUrl: '#',
-    filePublicId: 'mock/global-economic-shifts-2025',
-    fileName: 'Global Economic Shifts 2025.docx',
-    fileType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    fileSize: 612000,
-    uploadedBy: 'mock-review-user',
-    createdAt: new Date('2026-05-24T13:45:00.000Z').toISOString(),
-    updatedAt: new Date('2026-05-24T13:45:00.000Z').toISOString(),
-  },
-  {
-    id: 'mock-doc-4',
-    title: 'Calculus III — Multivariable Methods',
-    description: 'Lecture notes HK1',
-    subject: 'Mathematics',
-    fileUrl: '#',
-    filePublicId: 'mock/calculus-iii',
-    fileName: 'Calculus III.pdf',
-    fileType: 'application/pdf',
-    fileSize: 2210000,
-    uploadedBy: 'mock-review-user',
-    createdAt: new Date('2025-10-05T09:00:00.000Z').toISOString(),
-    updatedAt: new Date('2025-10-05T09:00:00.000Z').toISOString(),
-  },
-  {
-    id: 'mock-doc-5',
-    title: 'Data Structures & Algorithms',
-    description: 'HK1 notes',
-    subject: 'AI Research',
-    fileUrl: '#',
-    filePublicId: 'mock/dsa',
-    fileName: 'DSA.pdf',
-    fileType: 'application/pdf',
-    fileSize: 1540000,
-    uploadedBy: 'mock-review-user',
-    createdAt: new Date('2025-11-12T11:00:00.000Z').toISOString(),
-    updatedAt: new Date('2025-11-12T11:00:00.000Z').toISOString(),
-  },
-]
-
-async function authHeaders(): Promise<Record<string, string>> {
-  const token = await getStoredToken()
-  return token ? { Authorization: `Bearer ${token}` } : {}
+function normalizeSubjectId(value: unknown): string | undefined {
+  if (!value) return undefined
+  if (typeof value === 'string') return value
+  if (typeof value === 'object' && value !== null) {
+    const obj = value as { _id?: string; id?: string }
+    return obj._id || obj.id
+  }
+  return undefined
 }
 
-export async function listDocuments(): Promise<DocumentsResponse> {
-  if (USE_MOCK_AUTH) return mockDocuments
+function normalizeSubject(value: unknown): DocumentItem['personalSubject'] {
+  if (!value || typeof value !== 'object') return null
+  const subject = value as Record<string, unknown>
+  const id = normalizeSubjectId(value)
+  if (!id || typeof subject.name !== 'string') return null
+  return {
+    _id: id,
+    id,
+    name: subject.name,
+    code: typeof subject.code === 'string' ? subject.code : undefined,
+    color: typeof subject.color === 'string' ? subject.color : undefined,
+    semester: typeof subject.semester === 'string' ? subject.semester : undefined,
+  }
+}
 
-  const headers = await authHeaders()
-  const res = await fetch(`${API_BASE_URL}/api/documents`, { headers })
-  const json: ApiResponse<DocumentsResponse> = await res.json()
-  return json.data ?? []
+function normalizeDoc(doc: DocumentItem): DocumentItem {
+  const raw = doc as DocumentItem & {
+    subjectId?: unknown
+    personalSubjectId?: unknown
+    extractedText?: string
+  }
+  const personalSubject = normalizeSubject(raw.personalSubject)
+  const workspaceSubject = normalizeSubject(raw.subject) || normalizeSubject(raw.subjectId)
+  const resolvedSubject = raw.shareContext === 'SUBJECT_WORKSPACE'
+    ? workspaceSubject
+    : personalSubject || workspaceSubject
+
+  return {
+    ...raw,
+    subjectId: resolvedSubject?._id || normalizeSubjectId(raw.subjectId),
+    subject: resolvedSubject || (typeof raw.subject === 'string' ? raw.subject : undefined),
+    personalSubjectId: normalizeSubjectId(raw.personalSubjectId),
+    personalSubject,
+  }
+}
+
+function trimDoc(doc: DocumentItem): DocumentItem {
+  const { extractedText: _et, ...rest } = doc as DocumentItem & { extractedText?: string }
+  return rest
+}
+
+export async function listDocuments(filter?: DocumentFilter): Promise<DocumentsResponse> {
+  const params = new URLSearchParams()
+  if (filter?.search) params.append('keyword', filter.search)
+  if (filter?.visibility) params.append('visibility', filter.visibility)
+  if (filter?.subject) params.append('subjectId', filter.subject)
+  if (filter?.status) params.append('status', filter.status)
+  params.append('limit', '100')
+
+  const { data } = await apiClient.get<ApiResponse<{ documents: DocumentItem[]; total: number }>>(
+    `/api/documents?${params.toString()}`
+  )
+  const docs = data.data?.documents ?? (data.data as unknown as DocumentItem[]) ?? []
+  return (Array.isArray(docs) ? docs : []).map(trimDoc).map(normalizeDoc)
+}
+
+export async function listSharedWithMe(): Promise<DocumentsResponse> {
+  const { data } = await apiClient.get<{ data?: DocumentItem[] }>(
+    '/api/documents/shared-with-me?limit=100',
+  )
+  return (Array.isArray(data.data) ? data.data : []).map(trimDoc).map(normalizeDoc)
+}
+
+export async function listStarredDocuments(): Promise<DocumentsResponse> {
+  const { data } = await apiClient.get<{ data?: DocumentItem[] }>(
+    '/api/documents/starred?limit=100',
+  )
+  return (Array.isArray(data.data) ? data.data : []).map(trimDoc).map(normalizeDoc)
+}
+
+export async function listTrashDocuments(): Promise<DocumentsResponse> {
+  const { data } = await apiClient.get<{ data?: DocumentItem[] }>(
+    '/api/documents/trash?limit=100',
+  )
+  return (Array.isArray(data.data) ? data.data : []).map(trimDoc).map(normalizeDoc)
+}
+
+export async function getDocument(id: string): Promise<DocumentItem> {
+  const { data } = await apiClient.get<ApiResponse<DocumentItem>>(`/api/documents/${id}`)
+  if (!data.data) throw new Error('Document not found')
+  // Keep extractedText for the detail page (no trimDoc)
+  return normalizeDoc(data.data)
 }
 
 export async function searchDocuments(query: string): Promise<DocumentsResponse> {
-  if (USE_MOCK_AUTH) {
-    const normalized = query.trim().toLowerCase()
-    if (!normalized) return mockDocuments
-    return mockDocuments.filter(
-      (doc) =>
-        doc.title.toLowerCase().includes(normalized) ||
-        doc.subject?.toLowerCase().includes(normalized),
-    )
-  }
-
-  const headers = await authHeaders()
-  const res = await fetch(
-    `${API_BASE_URL}/api/documents/search?q=${encodeURIComponent(query)}`,
-    { headers },
-  )
-  const json: ApiResponse<DocumentsResponse> = await res.json()
-  return json.data ?? []
+  const { data } = await apiClient.get<ApiResponse<DocumentsResponse>>('/api/documents/search', {
+    params: { q: query },
+  })
+  const docs = data.data ?? []
+  return (Array.isArray(docs) ? docs : []).map(trimDoc).map(normalizeDoc)
 }
 
 export async function uploadDocument(payload: UploadDocumentPayload): Promise<DocumentItem> {
-  if (USE_MOCK_AUTH) {
-    const now = new Date().toISOString()
-    const doc: DocumentItem = {
-      id: `mock-doc-${Date.now()}`,
-      title: payload.title,
-      description: payload.description,
-      subject: payload.subject || 'Uploaded',
-      fileUrl: payload.file.uri,
-      filePublicId: `mock/${payload.file.name}`,
-      fileName: payload.file.name,
-      fileType: payload.file.type,
-      fileSize: payload.file.size ?? 0,
-      uploadedBy: 'mock-review-user',
-      createdAt: now,
-      updatedAt: now,
-    }
-    mockDocuments = [doc, ...mockDocuments]
-    return doc
-  }
-
-  const headers = await authHeaders()
   const form = new FormData()
   form.append('file', {
     uri: payload.file.uri,
@@ -149,49 +123,178 @@ export async function uploadDocument(payload: UploadDocumentPayload): Promise<Do
   form.append('title', payload.title)
   if (payload.description) form.append('description', payload.description)
   if (payload.subject) form.append('subject', payload.subject)
+  if (payload.subjectId) form.append('subjectId', payload.subjectId)
+  if (payload.visibility) form.append('visibility', payload.visibility)
+  if (payload.metadata) form.append('metadata', JSON.stringify(payload.metadata))
+  if (payload.tags?.length) form.append('tags', JSON.stringify(payload.tags))
+  if (payload.author) form.append('author', payload.author)
+  if (payload.semester) form.append('semester', payload.semester)
+  if (payload.academicYear) form.append('academicYear', payload.academicYear)
 
-  const res = await fetch(`${API_BASE_URL}/api/documents`, {
-    method: 'POST',
-    headers,
-    body: form,
-  })
-  const json: ApiResponse<DocumentItem> = await res.json()
-  if (!json.data) throw new Error(json.message || 'Upload failed')
-  return json.data
+  try {
+    const { data } = await apiClient.post<ApiResponse<DocumentItem>>('/api/documents/upload', form, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (payload.onProgress && progressEvent.total) {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          payload.onProgress(percentCompleted)
+        }
+      },
+    })
+
+    if (!data.data) throw new Error(data.message || 'Upload failed')
+    return normalizeDoc(trimDoc(data.data))
+  } catch (error: any) {
+    let errorMessage = 'Upload failed'
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    throw new Error(errorMessage)
+  }
 }
 
 export async function updateDocument(
   id: string,
   payload: UpdateDocumentPayload,
 ): Promise<DocumentItem> {
-  if (USE_MOCK_AUTH) {
-    const current = mockDocuments.find((doc) => doc.id === id)
-    if (!current) throw new Error('Document not found')
-    const updated = { ...current, ...payload, updatedAt: new Date().toISOString() }
-    mockDocuments = mockDocuments.map((doc) => (doc.id === id ? updated : doc))
-    return updated
-  }
-
-  const headers = await authHeaders()
-  const res = await fetch(`${API_BASE_URL}/api/documents/${id}`, {
-    method: 'PUT',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const json: ApiResponse<DocumentItem> = await res.json()
-  if (!json.data) throw new Error(json.message || 'Update failed')
-  return json.data
+  const { data } = await apiClient.put<ApiResponse<DocumentItem>>(
+    `/api/documents/${id}`,
+    payload,
+  )
+  if (!data.data) throw new Error(data.message || 'Update failed')
+  return normalizeDoc(data.data)
 }
 
-export async function deleteDocument(id: string): Promise<void> {
-  if (USE_MOCK_AUTH) {
-    mockDocuments = mockDocuments.filter((doc) => doc.id !== id)
-    return
-  }
+export async function updateSharedDocumentProfile(
+  id: string,
+  payload: UpdateSharedDocumentProfilePayload,
+): Promise<DocumentItem> {
+  const { data } = await apiClient.patch<ApiResponse<DocumentItem>>(
+    `/api/documents/${id}/shared-profile`,
+    payload,
+  )
+  if (!data.data) throw new Error(data.message || 'Update failed')
+  return normalizeDoc(data.data)
+}
 
-  const headers = await authHeaders()
-  await fetch(`${API_BASE_URL}/api/documents/${id}`, {
-    method: 'DELETE',
-    headers,
-  })
+export async function deleteDocument(id: string): Promise<{ ragStatus: string; warning?: string }> {
+  try {
+    const { data } = await apiClient.delete<ApiResponse<{ ragStatus: string; warning?: string }>>(
+      `/api/documents/${id}`,
+    )
+    if (!data.data) throw new Error(data.message || 'Delete failed')
+    return data.data
+  } catch (error: any) {
+    let errorMessage = 'Delete failed'
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    throw new Error(errorMessage)
+  }
+}
+
+export async function restoreDocument(id: string): Promise<DocumentItem> {
+  const { data } = await apiClient.post<ApiResponse<DocumentItem>>(
+    `/api/documents/${id}/restore`,
+  )
+  if (!data.data) throw new Error(data.message || 'Restore failed')
+  return normalizeDoc(trimDoc(data.data))
+}
+
+export async function deleteDocumentPermanently(id: string): Promise<void> {
+  await apiClient.delete(`/api/documents/${id}/permanent`)
+}
+
+export async function emptyTrash(): Promise<{
+  deletedCount: number
+  failedCount: number
+  failures: Array<{ documentId: string; stage: string; message: string }>
+}> {
+  const { data } = await apiClient.delete<ApiResponse<{
+    deletedCount: number
+    failedCount: number
+    failures: Array<{ documentId: string; stage: string; message: string }>
+  }>>(
+    '/api/documents/trash/empty',
+  )
+  if (!data.data) throw new Error(data.message || 'Empty trash failed')
+  return data.data
+}
+
+export async function setDocumentStar(
+  id: string,
+  starred: boolean,
+): Promise<DocumentItem> {
+  const { data } = await apiClient.patch<ApiResponse<DocumentItem>>(
+    `/api/documents/${id}/star`,
+    { starred },
+  )
+  if (!data.data) throw new Error(data.message || 'Star update failed')
+  return normalizeDoc(trimDoc(data.data))
+}
+
+export async function getDocumentDownloadUrl(
+  documentId: string,
+): Promise<{ downloadUrl: string; fileName?: string }> {
+  const { data } = await apiClient.get<
+    ApiResponse<{ downloadUrl: string; fileName?: string }>
+  >(`/api/documents/${documentId}/download`)
+  if (!data.data) throw new Error(data.message || 'Download URL not available')
+  return data.data
+}
+
+export async function listDocumentShares(documentId: string): Promise<DocumentShare[]> {
+  const { data } = await apiClient.get<ApiResponse<DocumentShare[]>>(
+    `/api/documents/${documentId}/share`,
+  )
+  return data.data ?? []
+}
+
+export async function shareDocument(
+  documentId: string,
+  payload: { email: string; permission: DocumentSharePermission },
+): Promise<DocumentShare> {
+  const { data } = await apiClient.post<ApiResponse<DocumentShare>>(
+    `/api/documents/${documentId}/share`,
+    payload,
+  )
+  if (!data.data) throw new Error(data.message || 'Unable to share document')
+  return data.data
+}
+
+export async function updateDocumentShare(
+  documentId: string,
+  shareId: string,
+  permission: DocumentSharePermission,
+): Promise<DocumentShare> {
+  const { data } = await apiClient.patch<ApiResponse<DocumentShare>>(
+    `/api/documents/${documentId}/share/${shareId}`,
+    { permission },
+  )
+  if (!data.data) throw new Error(data.message || 'Unable to update permission')
+  return data.data
+}
+
+export async function revokeDocumentShare(
+  documentId: string,
+  shareId: string,
+): Promise<void> {
+  await apiClient.delete(`/api/documents/${documentId}/share/${shareId}`)
+}
+
+export async function resendDocumentShareEmail(
+  documentId: string,
+  shareId: string,
+): Promise<DocumentShare> {
+  const { data } = await apiClient.post<ApiResponse<DocumentShare>>(
+    `/api/documents/${documentId}/share/${shareId}/resend-email`,
+  )
+  if (!data.data) throw new Error(data.message || 'Unable to resend email')
+  return data.data
 }

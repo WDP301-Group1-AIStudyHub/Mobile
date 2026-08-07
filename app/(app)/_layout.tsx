@@ -1,42 +1,42 @@
-import { useMemo } from 'react'
-import { Tabs } from 'expo-router'
-import { LayoutDashboard, BookOpen, MessageCircle, User } from 'lucide-react-native'
-import { View, StyleSheet, Platform } from 'react-native'
+import { useEffect, useMemo } from 'react'
+import { Tabs, router, usePathname } from 'expo-router'
+import { LayoutDashboard, MessageCircle, User, FolderOpen, Brain } from 'lucide-react-native'
+import { View, StyleSheet, Platform, ActivityIndicator } from 'react-native'
 
-import { useColors, useTheme } from '../../contexts/ThemeContext'
-import { LinearGradient } from 'expo-linear-gradient'
+import { useColors } from '../../contexts/ThemeContext'
+import { useAuth } from '../../hooks/useAuth'
+import { refreshStorage } from '../../hooks/useStorage'
+import { refreshAiUsage } from '../../hooks/useAiUsage'
 
 const tabIconStyles = StyleSheet.create({
   iconWrap: {
-    width: 40,
-    height: 34,
+    width: 44,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  iconWrapActive: {
-    width: 40,
-    height: 34,
+    borderRadius: 10,
   },
 })
 
-function TabIcon({ icon: Icon, focused }: { icon: typeof LayoutDashboard; focused: boolean }) {
+function TabIcon({
+  icon: Icon,
+  focused,
+}: {
+  icon: typeof LayoutDashboard
+  focused: boolean
+}) {
   const C = useColors()
   return (
-    <View style={[tabIconStyles.iconWrap, focused && tabIconStyles.iconWrapActive]}>
-      {focused && (
-        <LinearGradient
-          colors={C.gradientPrimary}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[StyleSheet.absoluteFill, { borderRadius: 12 }]}
-        />
-      )}
+    <View
+      style={[
+        tabIconStyles.iconWrap,
+        focused && { backgroundColor: C.primaryDim },
+      ]}
+    >
       <Icon
-        size={21}
-        color={focused ? '#fff' : C.muted}
-        strokeWidth={focused ? 2.2 : 1.8}
+        size={20}
+        color={focused ? C.primary : C.muted}
+        strokeWidth={focused ? 2.2 : 2.5}
       />
     </View>
   )
@@ -44,39 +44,69 @@ function TabIcon({ icon: Icon, focused }: { icon: typeof LayoutDashboard; focuse
 
 export default function AppLayout() {
   const C = useColors()
-  const { isDark } = useTheme()
+  const { state } = useAuth()
+  const pathname = usePathname()
+
+  // Auth guard: redirect to login if not authenticated
+  useEffect(() => {
+    if (state.status === 'unauthenticated') {
+      router.replace({
+        pathname: '/(auth)/login',
+        params: pathname && pathname !== '/' ? { returnTo: pathname } : undefined,
+      })
+    }
+  }, [pathname, state.status])
+
+  // Loaded once here so both upload guards and the dashboard bar can answer
+  // "does this file fit?" without each screen fetching for itself.
+  useEffect(() => {
+    if (state.status === 'authenticated') {
+      void refreshStorage()
+      void refreshAiUsage()
+    }
+  }, [state.status])
 
   const styles = useMemo(() => StyleSheet.create({
-  tabBar: {
-    backgroundColor: isDark ? 'rgba(10,14,26,0.82)' : 'rgba(255,255,252,0.90)',
-    borderTopWidth: 1,
-    borderTopColor: C.cardBorder,
-    height: Platform.OS === 'ios' ? 84 : 72,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-    paddingTop: 8,
-    shadowColor: C.cardShadowColor,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 16,
-  },
-  tabLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-    marginTop: 2,
-  },
-}), [C, isDark])
+    tabBar: {
+      backgroundColor: C.card,
+      borderTopWidth: 1,
+      borderTopColor: C.cardBorder,
+      height: Platform.OS === 'ios' ? 88 : 82,
+      paddingBottom: Platform.OS === 'ios' ? 26 : 18,
+      paddingTop: 7,
+      boxShadow: '0 -1px 4px rgba(16, 24, 20, 0.06)',
+    },
+    tabLabel: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0,
+      marginTop: 0,
+    },
+    tabItem: {
+      paddingVertical: 2,
+    },
+  }), [C])
+
+  // Don't render tabs until auth state is resolved
+  if (state.status !== 'authenticated') {
+    return (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.background }}>
+        <ActivityIndicator size="large" color={C.primary} />
+      </View>
+    )
+  }
 
   return (
     <Tabs
       screenOptions={{
+        sceneStyle: { backgroundColor: C.background },
         headerShown: false,
         tabBarStyle: styles.tabBar,
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.tabLabel,
+        tabBarItemStyle: styles.tabItem,
         tabBarActiveTintColor: C.primary,
-        tabBarInactiveTintColor: C.muted,
+        tabBarInactiveTintColor: C.background === 'transparent' ? '#000000' : C.muted,
       }}
     >
       <Tabs.Screen
@@ -85,6 +115,15 @@ export default function AppLayout() {
           title: 'Dashboard',
           tabBarIcon: ({ focused }) => (
             <TabIcon icon={LayoutDashboard} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="documents"
+        options={{
+          title: 'Documents',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon={FolderOpen} focused={focused} />
           ),
         }}
       />
@@ -98,14 +137,27 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="library"
+        name="study-materials"
         options={{
-          title: 'Library',
+          title: 'Study Sets',
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon={BookOpen} focused={focused} />
+            <TabIcon icon={Brain} focused={focused} />
           ),
         }}
       />
+      <Tabs.Screen
+        name="subjects"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="benchmarks"
+        options={{ href: null }}
+      />
+      <Tabs.Screen name="evaluation" options={{ href: null }} />
+      <Tabs.Screen name="storage" options={{ href: null }} />
+      <Tabs.Screen name="shared-summaries" options={{ href: null }} />
+      <Tabs.Screen name="subject/[id]" options={{ href: null }} />
+      {/* chat/[id] and chat/artifacts are intentionally NOT registered here — they are owned by chat/_layout.tsx Stack */}
       <Tabs.Screen
         name="profile"
         options={{
@@ -122,6 +174,22 @@ export default function AppLayout() {
       />
       <Tabs.Screen
         name="change-password"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="document/[id]"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="document/viewer/[id]"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="search"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="study-material/[id]"
         options={{ href: null }}
       />
     </Tabs>
