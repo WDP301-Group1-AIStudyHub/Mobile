@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import * as Clipboard from 'expo-clipboard'
-import { ArrowLeft, Check, Copy, RefreshCw, Sparkles, Users, X } from 'lucide-react-native'
+import { ArrowLeft, Check, Copy, ExternalLink, RefreshCw, Sparkles, Users, X } from 'lucide-react-native'
 
 import Card from '../../components/ui/Card'
 import SummaryMarkdown from '../../components/artifacts/SummaryMarkdown'
@@ -136,6 +136,13 @@ export default function SharedSummariesScreen() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const openSourceDocument = () => {
+    const documentId = readerEntry?.artifact.summaryDocumentId
+    if (!documentId) return
+    setReaderVisible(false)
+    router.push(`/(app)/document/viewer/${documentId}` as any)
+  }
+
   const styles = StyleSheet.create({
     safe: { flex: 1, backgroundColor: C.background },
     content: { padding: Spacing.lg, paddingBottom: Spacing.xxl + 48, gap: Spacing.lg },
@@ -209,7 +216,7 @@ export default function SharedSummariesScreen() {
           </Pressable>
           <View>
             <Text style={styles.title}>Shared with me</Text>
-            <Text style={styles.subtitle}>AI summaries other people have shared with you</Text>
+            <Text style={styles.subtitle}>AI summaries other people have shared with you — opening one also gives you the source document</Text>
           </View>
         </View>
 
@@ -274,6 +281,11 @@ export default function SharedSummariesScreen() {
               </Text>
             </View>
             <View style={styles.readerActions}>
+              {readerEntry?.artifact.summaryDocumentId ? (
+                <Pressable style={styles.readerIconBtn} onPress={openSourceDocument} hitSlop={8}>
+                  <ExternalLink size={17} color={C.text} />
+                </Pressable>
+              ) : null}
               <Pressable style={styles.readerIconBtn} onPress={copyMarkdown} hitSlop={8}>
                 {copied ? <Check size={17} color={C.success} /> : <Copy size={17} color={C.text} />}
               </Pressable>
