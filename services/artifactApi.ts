@@ -48,6 +48,17 @@ export async function createDocumentSummary(documentId: string): Promise<{ recor
   return { record: unwrap(response.data, 'Failed to create summary'), status: response.status as 200 | 202 }
 }
 
+/**
+ * Read-only counterpart to createDocumentSummary — never creates or charges.
+ * Lets a screen restore an already-generated summary on mount without risking
+ * a silent quota charge for a document that was never summarized. Returns
+ * null when no summary exists yet.
+ */
+export async function getExistingDocumentSummary(documentId: string): Promise<ArtifactRecord | null> {
+  const { data } = await apiClient.get<ApiResponse<ArtifactRecord | null>>(`/api/documents/${documentId}/summaries`)
+  return unwrap(data, 'Failed to check for an existing summary')
+}
+
 export type ArtifactSharePermission = 'VIEW'
 export interface ArtifactShareUser { id: string; fullName: string; email: string; avatar?: string }
 export interface ArtifactShare {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -11,7 +11,6 @@ import {
   View,
   Linking
 } from 'react-native'
-import * as Clipboard from 'expo-clipboard'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, router } from 'expo-router'
 import {
@@ -39,9 +38,6 @@ import {
   Check,
   Share2,
   Star,
-  Sparkles,
-  Copy,
-  Users,
 } from 'lucide-react-native'
 import Card from '../../../components/ui/Card'
 import { FontSize, Spacing, Radius } from '../../../constants/colors'
@@ -54,25 +50,12 @@ import {
   updateDocument,
 } from '../../../services/documentApi'
 import { listSubjects } from '../../../services/subjectApi'
-import {
-  createDocumentSummary,
-  getArtifactById,
-  type ArtifactRecord,
-} from '../../../services/artifactApi'
-import { getApiErrorDetails } from '../../../services/apiClient'
 import type { DocumentItem, DocumentVisibility } from '../../../types/document'
 import type { SubjectItem } from '../../../types/subject'
 import DocumentShareSheet from '../../../components/documents/document-share-sheet'
 import SharedDocumentSubjectSheet from '../../../components/documents/shared-document-subject-sheet'
-import SummaryShareSheet from '../../../components/artifacts/summary-share-sheet'
-import SummaryMarkdown from '../../../components/artifacts/SummaryMarkdown'
 import { useAuth } from '../../../hooks/useAuth'
-import { useAiUsage, refreshAiUsage } from '../../../hooks/useAiUsage'
-import { deriveAiPlanState } from '../../../utils/aiPlanState'
 import { formatBytes } from '../../../utils/formatBytes'
-
-const SUMMARY_POLL_INTERVAL_MS = 2000
-const SUMMARY_POLL_TIMEOUT_MS = 90000
 
 const getSafeId = (item: unknown): string => {
   if (!item || typeof item !== 'object') return ''
@@ -419,25 +402,6 @@ export default function DocumentDetailsPage() {
   const [editDesc, setEditDesc] = useState('')
   const [editVisibility, setEditVisibility] = useState<DocumentVisibility>('PRIVATE')
   const [editSubject, setEditSubject] = useState<SubjectItem | null>(null)
-  const [summaryRecord, setSummaryRecord] = useState<ArtifactRecord | null>(null)
-  const [summaryPhase, setSummaryPhase] = useState<
-    'idle' | 'starting' | 'polling' | 'done' | 'error'
-  >('idle')
-  const [summaryError, setSummaryError] = useState<{
-    code?: string
-    message: string
-    details?: Record<string, unknown>
-  } | null>(null)
-  const [showSummaryShare, setShowSummaryShare] = useState(false)
-  const { usage: aiUsage } = useAiUsage()
-  const isMountedRef = useRef(true)
-
-  useEffect(() => {
-    isMountedRef.current = true
-    return () => {
-      isMountedRef.current = false
-    }
-  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -583,93 +547,6 @@ export default function DocumentDetailsPage() {
         'Download failed',
         error instanceof Error ? error.message : 'Unable to download document.',
       )
-    }
-  }
-
-  const pollSummary = async (artifactId: string) => {
-    const startedAt = Date.now()
-
-    for (;;) {
-      if (!isMountedRef.current) return
-
-      try {
-        const updated = await getArtifactById(artifactId)
-        if (!isMountedRef.current) return
-        setSummaryRecord(updated)
-
-        if (updated.status === 'COMPLETED') {
-          setSummaryPhase('done')
-          return
-        }
-        if (updated.status === 'FAILED') {
-          setSummaryPhase('error')
-          setSummaryError({ message: 'Summary generation failed. You can retry.' })
-          return
-        }
-      } catch {
-        // A transient poll failure isn't fatal — keep trying until the timeout.
-      }
-
-      if (Date.now() - startedAt >= SUMMARY_POLL_TIMEOUT_MS) {
-        // Still processing is not a failure — leave the phase as polling so
-        // the UI keeps showing "generating" rather than an error.
-        return
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, SUMMARY_POLL_INTERVAL_MS))
-    }
-  }
-
-  const handleSummarize = async () => {
-    if (!doc) return
-    setSummaryPhase('starting')
-    setSummaryError(null)
-
-    try {
-      const { record, status } = await createDocumentSummary(doc.id)
-      if (!isMountedRef.current) return
-      setSummaryRecord(record)
-
-      if (status === 202) {
-        void refreshAiUsage()
-      }
-
-      if (record.status === 'COMPLETED') {
-        setSummaryPhase('done')
-        return
-      }
-      if (record.status === 'FAILED') {
-        setSummaryPhase('error')
-        setSummaryError({ message: 'Summary generation failed. You can retry.' })
-        return
-      }
-
-      setSummaryPhase('polling')
-      await pollSummary(record._id)
-    } catch (error) {
-      if (!isMountedRef.current) return
-      const details = getApiErrorDetails(error)
-      setSummaryPhase('error')
-
-      if (details.status === 429) {
-        setSummaryError({ code: details.code, message: details.message, details: details.details })
-      } else if (details.status === 400 && details.code === 'DOCUMENT_NOT_READABLE') {
-        Alert.alert(
-          'Document not ready',
-          'This document is not ready to be summarized yet (still processing, or a scanned/image file with no extracted text).',
-        )
-        setSummaryPhase('idle')
-      } else {
-        Alert.alert('Summary failed', details.message || 'Could not generate summary.')
-        setSummaryPhase('idle')
-      }
-    }
-  }
-
-  const copySummary = async () => {
-    const content = summaryRecord?.content
-    if (content && 'markdown' in content) {
-      await Clipboard.setStringAsync(content.markdown)
     }
   }
 
@@ -920,37 +797,6 @@ export default function DocumentDetailsPage() {
                 <Text style={styles.actionBtnText}>Read Document</Text>
               </Pressable>
             )}
-            
-            {doc.isOwner && summaryPhase !== 'done' && (
-              <Pressable
-                style={[styles.actionBtnFull, { backgroundColor: C.primaryDim, borderWidth: 1, borderColor: C.primary }]}
-                onPress={handleSummarize}
-                disabled={summaryPhase === 'starting' || summaryPhase === 'polling'}
-              >
-                {summaryPhase === 'starting' || summaryPhase === 'polling' ? (
-                  <ActivityIndicator size="small" color={C.primary} />
-                ) : (
-                  <Sparkles size={16} color={C.primary} />
-                )}
-                <Text style={[styles.actionBtnText, { color: C.primary }]}>
-                  {summaryPhase === 'starting' || summaryPhase === 'polling'
-                    ? 'Summarizing...'
-                    : summaryPhase === 'error'
-                      ? 'Retry summary'
-                      : 'Summarize with AI'}
-                </Text>
-              </Pressable>
-            )}
-
-            {doc.isOwner && aiUsage && (
-              <Text style={{ color: C.muted, fontSize: FontSize.xs, textAlign: 'center' }}>
-                {(() => {
-                  const plan = deriveAiPlanState(aiUsage)
-                  if (plan.kind === 'byok' || plan.kind === 'exempt') return 'Unlimited AI usage'
-                  return `AI usage: ${plan.used}/${plan.limit} this period`
-                })()}
-              </Text>
-            )}
 
             <View style={styles.actionRow}>
               {!!doc.fileUrl && (
@@ -971,46 +817,6 @@ export default function DocumentDetailsPage() {
               </Pressable>
             </View>
           </View>
-
-          {/* AI Summary Block */}
-          {doc.isOwner && summaryPhase !== 'idle' && (
-            <Card style={{ marginTop: Spacing.sm, padding: Spacing.md, gap: Spacing.sm, borderColor: C.primary, borderWidth: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
-                  <Sparkles size={18} color={C.primary} />
-                  <Text style={{ fontSize: FontSize.base, fontWeight: '700', color: C.text }}>AI Summary</Text>
-                </View>
-                {summaryPhase === 'done' && summaryRecord && (
-                  <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-                    <Pressable onPress={copySummary} hitSlop={8}>
-                      <Copy size={18} color={C.muted} />
-                    </Pressable>
-                    <Pressable onPress={() => setShowSummaryShare(true)} hitSlop={8}>
-                      <Users size={18} color={C.muted} />
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-
-              {summaryPhase === 'starting' || summaryPhase === 'polling' ? (
-                <Text style={{ color: C.muted, fontSize: FontSize.sm }}>
-                  Analyzing document content and generating summary...
-                </Text>
-              ) : summaryPhase === 'error' && summaryError?.details ? (
-                <Text style={{ color: C.error, fontSize: FontSize.sm }}>
-                  You've reached your AI usage limit for this period
-                  {typeof summaryError.details.resetAt === 'string'
-                    ? ` (resets ${formatDate(summaryError.details.resetAt as string)})`
-                    : ''}
-                  .
-                </Text>
-              ) : summaryPhase === 'error' && summaryError ? (
-                <Text style={{ color: C.error, fontSize: FontSize.sm }}>{summaryError.message}</Text>
-              ) : summaryPhase === 'done' && summaryRecord?.content && 'markdown' in summaryRecord.content ? (
-                <SummaryMarkdown markdown={summaryRecord.content.markdown} />
-              ) : null}
-            </Card>
-          )}
         </ScrollView>
 
         <Modal
@@ -1186,12 +992,6 @@ export default function DocumentDetailsPage() {
           onClose={() => setShowSharedSubject(false)}
           onUpdated={setDoc}
           visible={showSharedSubject}
-        />
-        <SummaryShareSheet
-          artifactId={summaryRecord?._id ?? null}
-          onClose={() => setShowSummaryShare(false)}
-          title={doc.title}
-          visible={showSummaryShare}
         />
       </SafeAreaView>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { ScrollView, StyleSheet, Text, View, Pressable, Alert, ActivityIndicator } from 'react-native'
+import { ScrollView, StyleSheet, Text, View, Pressable, Alert, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Users, Ban, CheckCircle, ShieldAlert, MoreVertical, Search } from 'lucide-react-native'
 import Card from '../../components/ui/Card'
@@ -15,6 +15,8 @@ export default function UsersPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [banTargetUser, setBanTargetUser] = useState<AdminUser | null>(null)
+  const [banReasonInput, setBanReasonInput] = useState('')
 
   const filteredUsers = useMemo(() => {
     const q = search.toLowerCase()
@@ -42,33 +44,30 @@ export default function UsersPage() {
     fetchUsers()
   }, [fetchUsers])
 
+  // Alert.prompt is iOS-only and silently no-ops on Android, which made this
+  // button appear broken there. A custom modal works on both platforms.
   const handleBan = (user: AdminUser) => {
-    Alert.prompt(
-      'Ban User',
-      `Enter reason for banning ${user.email}:`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Ban', 
-          style: 'destructive',
-          onPress: async (reason?: string) => {
-            if (!reason) {
-              Alert.alert('Error', 'Reason is required')
-              return
-            }
-            try {
-              setActionLoadingId(user.id)
-              await banUser(user.id, reason)
-              await fetchUsers()
-            } catch (error) {
-              Alert.alert('Error', 'Failed to ban user')
-            } finally {
-              setActionLoadingId(null)
-            }
-          }
-        }
-      ]
-    )
+    setBanReasonInput('')
+    setBanTargetUser(user)
+  }
+
+  const confirmBan = async () => {
+    if (!banTargetUser) return
+    const reason = banReasonInput.trim()
+    if (!reason) {
+      Alert.alert('Error', 'Reason is required')
+      return
+    }
+    try {
+      setActionLoadingId(banTargetUser.id)
+      await banUser(banTargetUser.id, reason)
+      await fetchUsers()
+      setBanTargetUser(null)
+    } catch (error) {
+      Alert.alert('Error', 'Failed to ban user')
+    } finally {
+      setActionLoadingId(null)
+    }
   }
 
   const handleUnban = (user: AdminUser) => {
@@ -185,6 +184,55 @@ export default function UsersPage() {
       fontWeight: '700',
       color: C.text,
     },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: Spacing.lg,
+    },
+    modalCard: {
+      width: '100%',
+      maxWidth: 420,
+      borderRadius: Radius.lg,
+      backgroundColor: C.card,
+      padding: Spacing.lg,
+      gap: Spacing.md,
+    },
+    modalTitle: {
+      fontSize: FontSize.lg,
+      fontWeight: '700',
+      color: C.text,
+    },
+    modalSubtitle: {
+      fontSize: FontSize.sm,
+      color: C.muted,
+    },
+    modalInput: {
+      borderWidth: 1,
+      borderColor: C.cardBorder,
+      borderRadius: Radius.md,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      fontSize: FontSize.sm,
+      color: C.text,
+      minHeight: 80,
+      textAlignVertical: 'top',
+    },
+    modalActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: Spacing.sm,
+    },
+    modalBtn: {
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      borderRadius: Radius.md,
+    },
+    modalBtnText: {
+      fontSize: FontSize.sm,
+      fontWeight: '700',
+    },
   }), [C])
 
   if (isLoading) {
@@ -263,6 +311,55 @@ export default function UsersPage() {
           ))
         )}
       </ScrollView>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={!!banTargetUser}
+        onRequestClose={() => setBanTargetUser(null)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalBackdrop}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setBanTargetUser(null)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Ban User</Text>
+            <Text style={styles.modalSubtitle}>
+              Enter reason for banning {banTargetUser?.email}:
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              value={banReasonInput}
+              onChangeText={setBanReasonInput}
+              placeholder="Reason for banning"
+              placeholderTextColor={C.muted}
+              multiline
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.modalBtn}
+                onPress={() => setBanTargetUser(null)}
+                disabled={actionLoadingId === banTargetUser?.id}
+              >
+                <Text style={[styles.modalBtnText, { color: C.muted }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, { backgroundColor: C.errorDim }]}
+                onPress={confirmBan}
+                disabled={actionLoadingId === banTargetUser?.id}
+              >
+                {actionLoadingId === banTargetUser?.id ? (
+                  <ActivityIndicator size="small" color={C.error} />
+                ) : (
+                  <Text style={[styles.modalBtnText, { color: C.error }]}>Ban</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   )
 }
