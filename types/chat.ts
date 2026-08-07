@@ -1,12 +1,18 @@
 // ── Chat types — mirrors BE api.types.ts & rag.types.ts ──────────────────────
 
-export type RagMode = 'basic' | 'corrective'
+export type RagMode = 'basic' | 'corrective' | 'dr-rag' | 'agentic'
+
+export interface AgentToolCallSummary {
+  tool: string
+  input?: unknown
+  resultSummary: string
+}
 
 export interface RagEvaluation {
   retrievedChunksCount: number
   relevantChunksCount: number
   averageRelevanceScore: number
-  correctiveAttempted: boolean
+  correctiveAttempted?: boolean
   isGrounded: boolean
   confidenceScore: number
   responseTimeMs: number
@@ -15,6 +21,10 @@ export interface RagEvaluation {
   warning?: string
   detectedIntent?: string
   retrievedSections?: string[]
+  retrievalQueries?: string[]
+  contextChunksUsed?: number
+  fallbackGenerated?: boolean
+  fallbackReason?: string
 }
 
 export interface ChatSource {
@@ -52,7 +62,12 @@ export interface AskResponse {
   originalQuestion?: string
   rewrittenQuery?: string
   sources: ChatSource[]
+  citedSources?: ChatSource[]
   evaluation?: RagEvaluation
+  agent?: {
+    steps: number
+    toolCalls: AgentToolCallSummary[]
+  }
 }
 
 export interface ChatHistoryItem {

@@ -28,13 +28,15 @@ function handleAxiosError(error: unknown): never {
   throw error
 }
 
-// ── POST /api/chat/ask ────────────────────────────────────────────────────────
-// Requires auth. Sends question + optional documentId/subject/mode.
-// BE returns answer, sources, evaluation, rewrittenQuery...
+// ── POST /api/agent/ask ───────────────────────────────────────────────────────
+// Uses the same agentic RAG engine as the web client: Gemini decides when and
+// how to search documents (tool-calling loop), verifies grounding, applies
+// inline citations, and can create artifacts. Non-streaming variant returns
+// the complete response as JSON.
 
 export async function askQuestion(payload: AskPayload): Promise<AskResponse> {
   try {
-    const { data } = await apiClient.post<ApiResponse<AskResponse>>('/api/chat/ask', payload)
+    const { data } = await apiClient.post<ApiResponse<AskResponse>>('/api/agent/ask', payload)
     if (!data.data) throw new ChatApiError('No data returned', 500)
     return data.data
   } catch (error) {
